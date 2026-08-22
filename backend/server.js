@@ -122,18 +122,20 @@ async function initDB() {
 
     // 3. Leave & Time-Off Requests Table
     await sql`
-      CREATE TABLE IF NOT EXISTS leave_requests (
-        id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(id) ON DELETE CASCADE,
-        leave_type VARCHAR(50) NOT NULL,            -- 'Paid', 'Sick', 'Unpaid'
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        remarks TEXT,
-        status VARCHAR(50) DEFAULT 'Pending',        -- 'Pending', 'Approved', 'Rejected'
-        admin_comments TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
+  CREATE TABLE IF NOT EXISTS leave_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    leave_type VARCHAR(50) NOT NULL,            -- 'Paid Time Off', 'Sick Leave', 'Unpaid Leaves'
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    allocation_days DECIMAL(5, 2) NOT NULL,      -- Calculated number of days (e.g. 1.0, 2.5)
+    attachment VARCHAR(255),                    -- URL / File path for sick leave certificates
+    remarks TEXT,
+    status VARCHAR(50) DEFAULT 'Pending',        -- 'Pending', 'Approved', 'Rejected'
+    admin_comments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`;
 
     console.log("Database initialized successfully");
   } catch (error) {
