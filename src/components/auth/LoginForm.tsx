@@ -173,8 +173,6 @@ export function LoginForm() {
           )}
         </button>
 
-        </button>
-
         {/* Create account */}
         <p className="lf-footer-text">
           Don't have an account?{' '}
