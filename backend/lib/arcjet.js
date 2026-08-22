@@ -17,7 +17,7 @@ export const aj = arcjet({
         // see the full list at https://arcjet.com/bot-list
       ],
     }),
-    // rate limiting here
+    // rate limiting
     tokenBucket({
       mode: "LIVE",
       refillRate: 30,
