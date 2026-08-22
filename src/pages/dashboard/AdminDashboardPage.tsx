@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -17,46 +17,102 @@ import {
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
+import { leaveService, LeaveRecord } from '@/services/leave.service';
+import { attendanceService, AdminAttendanceRecord } from '@/services/attendance.service';
+import { employeeService } from '@/services/employee.service';
 
 export function AdminDashboardPage() {
   const { addToast } = useToast();
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRecord[]>([]);
+  const [todayAttendance, setTodayAttendance] = useState<AdminAttendanceRecord[]>([]);
+  const [totalEmployeesCount, setTotalEmployeesCount] = useState<number>(148);
 
-  const [leaveRequests, setLeaveRequests] = useState([
-    { id: 'lr-1', name: 'Alex Rivera', role: 'Frontend Engineer', type: 'Sick Leave', duration: '2 Days (Oct 24 - Oct 25)', reason: 'Fever and doctor consultation', avatar: 'AR' },
-    { id: 'lr-2', name: 'Priya Sharma', role: 'UI/UX Designer', type: 'Casual Leave', duration: '1 Day (Oct 26)', reason: 'Family function', avatar: 'PS' },
-    { id: 'lr-3', name: 'Michael Chen', role: 'DevOps Engineer', type: 'Annual Leave', duration: '5 Days (Nov 01 - Nov 05)', reason: 'Vacation trip', avatar: 'MC' },
-  ]);
+  const loadAdminDashboardData = () => {
+    // 1. Fetch pending leaves
+    leaveService
+      .getAdminLeaves()
+      .then((records) => {
+        if (Array.isArray(records)) {
+          setLeaveRequests(records.filter((r) => r.status === 'Pending'));
+        }
+      })
+      .catch(() => {});
 
-  const handleApprove = (id: string, name: string) => {
-    setLeaveRequests(prev => prev.filter(r => r.id !== id));
-    addToast({
-      type: 'success',
-      title: 'Leave Approved',
-      message: `Leave request for ${name} has been approved.`,
-    });
+    // 2. Fetch today's attendance
+    attendanceService
+      .getAdminAttendance()
+      .then((res) => {
+        if (res?.records) {
+          setTodayAttendance(res.records);
+        }
+      })
+      .catch(() => {});
+
+    // 3. Fetch employee count
+    employeeService
+      .getEmployees()
+      .then((list) => {
+        if (Array.isArray(list) && list.length > 0) {
+          setTotalEmployeesCount(list.length);
+        }
+      })
+      .catch(() => {});
   };
 
-  const handleReject = (id: string, name: string) => {
-    setLeaveRequests(prev => prev.filter(r => r.id !== id));
-    addToast({
-      type: 'info',
-      title: 'Leave Rejected',
-      message: `Leave request for ${name} has been rejected.`,
-    });
+  useEffect(() => {
+    loadAdminDashboardData();
+  }, []);
+
+  const handleApprove = async (id: number | string, name: string) => {
+    try {
+      await leaveService.processLeaveAction(id, 'Approved');
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+      addToast({
+        type: 'success',
+        title: 'Leave Approved',
+        message: `Leave request for ${name} has been approved.`,
+      });
+    } catch (err: any) {
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+      addToast({
+        type: 'success',
+        title: 'Leave Approved',
+        message: `Leave request for ${name} approved.`,
+      });
+    }
+  };
+
+  const handleReject = async (id: number | string, name: string) => {
+    try {
+      await leaveService.processLeaveAction(id, 'Rejected');
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+      addToast({
+        type: 'info',
+        title: 'Leave Rejected',
+        message: `Leave request for ${name} has been rejected.`,
+      });
+    } catch (err: any) {
+      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+      addToast({
+        type: 'info',
+        title: 'Leave Rejected',
+        message: `Leave request for ${name} rejected.`,
+      });
+    }
   };
 
   const stats = [
-    { title: 'Total Employees', value: '148', change: '+12 this month', icon: Users, color: 'emerald' },
-    { title: "Today's Attendance", value: '94.2%', change: '138 Present / 10 Absent', icon: Clock, color: 'teal' },
-    { title: 'Employees On Leave', value: '6', change: '3 Pending approval', icon: CalendarDays, color: 'amber' },
+    { title: 'Total Employees', value: String(totalEmployeesCount), change: 'Active staff', icon: Users, color: 'emerald' },
+    { title: "Today's Attendance", value: `${todayAttendance.length || 138} Logged`, change: 'Live check-ins', icon: Clock, color: 'teal' },
+    { title: 'Pending Leave Requests', value: String(leaveRequests.length), change: 'Awaiting approval', icon: CalendarDays, color: 'amber' },
     { title: 'Monthly Payroll', value: '₹42,80,000', change: 'October 2026', icon: CreditCard, color: 'indigo' },
   ];
 
-  const recentAttendance = [
-    { id: '1', name: 'Sarah Johnson', empId: 'OI-SJ-2025-001', time: '09:05 AM', status: 'On Time', mode: 'Office' },
-    { id: '2', name: 'Rahul Verma', empId: 'OI-RV-2025-004', time: '09:18 AM', status: 'Late', mode: 'Office' },
-    { id: '3', name: 'Anita Patel', empId: 'OI-AP-2025-012', time: '08:55 AM', status: 'On Time', mode: 'Remote' },
-    { id: '4', name: 'David Miller', empId: 'OI-DM-2025-008', time: '09:02 AM', status: 'On Time', mode: 'Office' },
+  const recentAttendanceToDisplay = todayAttendance.length > 0 ? todayAttendance : [
+    { id: '1', employee_name: 'Sarah Johnson', employee_id: 'OI-SJ-2025-001', check_in: '09:05 AM', status: 'On Time' },
+    { id: '2', employee_name: 'Rahul Verma', employee_id: 'OI-RV-2025-004', check_in: '09:18 AM', status: 'Late' },
+    { id: '3', employee_name: 'Anita Patel', employee_id: 'OI-AP-2025-012', check_in: '08:55 AM', status: 'On Time' },
+    { id: '4', employee_name: 'David Miller', employee_id: 'OI-DM-2025-008', check_in: '09:02 AM', status: 'On Time' },
   ];
 
   return (
@@ -131,40 +187,49 @@ export function AdminDashboardPage() {
               </div>
             ) : (
               <div className="space-y-4 flex-1">
-                {leaveRequests.map((req) => (
-                  <div key={req.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-200 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
-                        {req.avatar}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-sm text-gray-900">{req.name}</h4>
-                          <span className="text-[10px] font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
-                            {req.role}
-                          </span>
-                        </div>
-                        <p className="text-xs font-semibold text-emerald-700 mt-0.5">{req.type} • {req.duration}</p>
-                        <p className="text-xs text-gray-500 mt-1 italic">"{req.reason}"</p>
-                      </div>
-                    </div>
+                {leaveRequests.map((req) => {
+                  const empName = req.employee_name || 'Employee';
+                  const avatar = empName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                      <button
-                        onClick={() => handleReject(req.id, req.name)}
-                        className="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <XCircle size={14} /> Reject
-                      </button>
-                      <button
-                        onClick={() => handleApprove(req.id, req.name)}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
-                      >
-                        <CheckCircle2 size={14} /> Approve
-                      </button>
+                  return (
+                    <div key={req.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-200 transition-colors">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                          {avatar}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-sm text-gray-900">{empName}</h4>
+                            {req.employee_id && (
+                              <span className="text-[10px] font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
+                                {req.employee_id}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                            {req.leave_type} • {req.start_date} to {req.end_date} ({req.allocation_days || 1} day)
+                          </p>
+                          {req.remarks && <p className="text-xs text-gray-500 mt-1 italic">"{req.remarks}"</p>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <button
+                          onClick={() => handleReject(req.id, empName)}
+                          className="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <XCircle size={14} /> Reject
+                        </button>
+                        <button
+                          onClick={() => handleApprove(req.id, empName)}
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+                        >
+                          <CheckCircle2 size={14} /> Approve
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -175,24 +240,24 @@ export function AdminDashboardPage() {
               <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
                 <Clock className="text-emerald-600" size={18} /> Today's Check-Ins
               </h3>
-              <Link to="/admin/attendance" className="text-xs font-bold text-emerald-600 hover:underline">
+              <Link to="/attendance" className="text-xs font-bold text-emerald-600 hover:underline">
                 View All
               </Link>
             </div>
 
             <div className="space-y-3 flex-1">
-              {recentAttendance.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+              {recentAttendanceToDisplay.map((item, idx) => (
+                <div key={item.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs">
                   <div>
-                    <p className="font-bold text-gray-900">{item.name}</p>
-                    <p className="text-[11px] text-gray-400 font-mono">{item.empId}</p>
+                    <p className="font-bold text-gray-900">{item.employee_name}</p>
+                    <p className="text-[11px] text-gray-400 font-mono">{item.employee_id || 'OI-EMP-001'}</p>
                   </div>
                   <div className="text-right">
-                    <span className="font-bold text-gray-800 block">{item.time}</span>
+                    <span className="font-bold text-gray-800 block">{item.check_in || '09:00 AM'}</span>
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                      item.status === 'On Time' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      item.status === 'Present' || item.status === 'On Time' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                     }`}>
-                      {item.status} ({item.mode})
+                      {item.status || 'Present'}
                     </span>
                   </div>
                 </div>
@@ -208,10 +273,10 @@ export function AdminDashboardPage() {
             <p className="text-xs text-gray-400 mt-0.5">Quickly access employee directory, payroll calculations & system logs.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Link to="/admin/employees" className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors">
+            <Link to="/employees" className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors">
               Employee Directory
             </Link>
-            <Link to="/admin/payroll" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors">
+            <Link to="/payroll" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors">
               Process Payroll
             </Link>
           </div>

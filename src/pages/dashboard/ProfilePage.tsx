@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, Building, Lock, Shield, CheckCircle, Save } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { employeeService } from '@/services/employee.service';
 
 export function ProfilePage() {
   const { user } = useAuth();
@@ -12,6 +13,20 @@ export function ProfilePage() {
   const [email, setEmail] = useState(user?.email || 'sarah.johnson@dayflow.com');
   const [phone, setPhone] = useState('+91 98765 43210');
   const [dept, setDept] = useState('Human Resources');
+
+  useEffect(() => {
+    if (!user?.id) return;
+    employeeService
+      .getEmployeeById(user.id)
+      .then((profile) => {
+        if (profile) {
+          if (profile.name) setName(profile.name);
+          if (profile.email) setEmail(profile.email);
+          if (profile.phone) setPhone(profile.phone);
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();

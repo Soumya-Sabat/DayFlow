@@ -1,27 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Search, Filter, UserPlus, Mail, Phone, Building, Shield, ChevronRight, Eye } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
+import { employeeService, EmployeeProfile } from '@/services/employee.service';
 
 export function EmployeesListPage() {
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const employees = [
-    { id: '1', name: 'Sarah Johnson', email: 'sarah.johnson@dayflow.com', loginId: 'OI-SJ-2025-001', role: 'admin', dept: 'Human Resources', phone: '+91 98765 43210', status: 'Active', avatar: 'SJ' },
-    { id: '2', name: 'Alex Rivera', email: 'alex.rivera@dayflow.com', loginId: 'OI-AR-2025-002', role: 'employee', dept: 'Engineering', phone: '+91 98765 43211', status: 'Active', avatar: 'AR' },
-    { id: '3', name: 'Priya Sharma', email: 'priya.sharma@dayflow.com', loginId: 'OI-PS-2025-003', role: 'employee', dept: 'Design', phone: '+91 98765 43212', status: 'Active', avatar: 'PS' },
-    { id: '4', name: 'Rahul Verma', email: 'rahul.verma@dayflow.com', loginId: 'OI-RV-2025-004', role: 'hr', dept: 'Human Resources', phone: '+91 98765 43213', status: 'Active', avatar: 'RV' },
-    { id: '5', name: 'Michael Chen', email: 'michael.chen@dayflow.com', loginId: 'OI-MC-2025-005', role: 'employee', dept: 'DevOps', phone: '+91 98765 43214', status: 'Active', avatar: 'MC' },
+  useEffect(() => {
+    employeeService
+      .getEmployees()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setEmployees(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const mockFallbackEmployees = [
+    { id: '1', name: 'Sarah Johnson', email: 'sarah.johnson@dayflow.com', employee_id: 'OI-SJ-2025-001', role: 'admin', phone: '+91 98765 43210' },
+    { id: '2', name: 'Alex Rivera', email: 'alex.rivera@dayflow.com', employee_id: 'OI-AR-2025-002', role: 'employee', phone: '+91 98765 43211' },
+    { id: '3', name: 'Priya Sharma', email: 'priya.sharma@dayflow.com', employee_id: 'OI-PS-2025-003', role: 'employee', phone: '+91 98765 43212' },
+    { id: '4', name: 'Rahul Verma', email: 'rahul.verma@dayflow.com', employee_id: 'OI-RV-2025-004', role: 'hr', phone: '+91 98765 43213' },
+    { id: '5', name: 'Michael Chen', email: 'michael.chen@dayflow.com', employee_id: 'OI-MC-2025-005', role: 'employee', phone: '+91 98765 43214' },
   ];
 
-  const filtered = employees.filter((e) => {
-    const matchSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        e.loginId.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchRole = roleFilter === 'all' || e.role === roleFilter;
+  const listToDisplay = employees.length > 0 ? employees : mockFallbackEmployees;
+
+  const filtered = listToDisplay.filter((e) => {
+    const loginId = e.employee_id || '';
+    const matchSearch =
+      e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      loginId.toLowerCase().includes(searchTerm.toLowerCase());
+    const roleLower = (e.role || '').toLowerCase();
+    const matchRole = roleFilter === 'all' || roleLower === roleFilter;
     return matchSearch && matchRole;
   });
 
@@ -82,48 +102,72 @@ export function EmployeesListPage() {
                 <tr>
                   <th className="px-6 py-4">Employee</th>
                   <th className="px-6 py-4">Login ID</th>
-                  <th className="px-6 py-4">Department</th>
+                  <th className="px-6 py-4">Phone</th>
                   <th className="px-6 py-4">Role</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
-                {filtered.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
-                        {emp.avatar}
-                      </div>
-                      <div>
-                        <span className="font-bold text-gray-900 block">{emp.name}</span>
-                        <span className="text-xs text-gray-400">{emp.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-xs font-semibold text-emerald-700">{emp.loginId}</td>
-                    <td className="px-6 py-4 text-xs">{emp.dept}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
-                        emp.role === 'admin' ? 'bg-purple-100 text-purple-800' : emp.role === 'hr' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {emp.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {emp.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => addToast({ type: 'info', title: 'Employee Details', message: `Viewing profile for ${emp.name}` })}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 hover:border-emerald-500 hover:text-emerald-600 text-xs font-bold transition-colors"
-                      >
-                        View Profile
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((emp) => {
+                  const avatarText = emp.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2);
+                  const roleLower = (emp.role || 'employee').toLowerCase();
+
+                  return (
+                    <tr key={emp.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="px-6 py-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                          {avatarText}
+                        </div>
+                        <div>
+                          <span className="font-bold text-gray-900 block">{emp.name}</span>
+                          <span className="text-xs text-gray-400">{emp.email}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-xs font-semibold text-emerald-700">
+                        {emp.employee_id || 'OI-EMP-001'}
+                      </td>
+                      <td className="px-6 py-4 text-xs">{emp.phone || '+91 98765 43210'}</td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
+                            roleLower === 'admin'
+                              ? 'bg-purple-100 text-purple-800'
+                              : roleLower === 'hr'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {roleLower}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() =>
+                            addToast({
+                              type: 'info',
+                              title: 'Employee Details',
+                              message: `Viewing profile for ${emp.name}`,
+                            })
+                          }
+                          className="px-3 py-1.5 rounded-lg border border-gray-200 hover:border-emerald-500 hover:text-emerald-600 text-xs font-bold transition-colors"
+                        >
+                          View Profile
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
