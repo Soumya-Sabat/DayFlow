@@ -6,5 +6,6 @@ export function AccountCreatedPage() {
     <AuthLayout variant="account-created">
       <AccountCreatedComponent />
     </AuthLayout>
+    //account
   );
 }
