@@ -9,6 +9,7 @@ export interface EmployeeProfile {
   role: string;
   address?: string;
   profile_picture?: string;
+  department?: string;
 }
 
 export interface EmployeeSalaryInfo {
@@ -32,6 +33,13 @@ export const employeeService = {
 
   async getEmployeeById(id: string | number): Promise<EmployeeProfile> {
     return apiRequest<EmployeeProfile>(`/employees/${id}`);
+  },
+
+  async updateProfile(id: string | number, data: { name: string; email: string; phone: string; address?: string; department?: string }) {
+    return apiRequest<{ message: string; employee: EmployeeProfile }>(`/employees/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 
   async getEmployeeSalary(id: string | number): Promise<EmployeeSalaryInfo> {

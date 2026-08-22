@@ -9,6 +9,7 @@ import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { CreateEmployeePage } from '@/pages/auth/CreateEmployeePage';
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage';
 import { AccountCreatedPage } from '@/pages/auth/AccountCreatedPage';
+import { RegisterAdminPage } from '@/pages/auth/RegisterAdminPage';
 
 // Dashboard Pages
 import { AdminDashboardPage } from '@/pages/dashboard/AdminDashboardPage';
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: 'change-password', element: <ChangePasswordPage /> },
       { path: 'create-employee', element: <CreateEmployeePage /> },
       { path: 'account-created', element: <AccountCreatedPage /> },
+      { path: 'register', element: <RegisterAdminPage /> },
     ],
   },
 

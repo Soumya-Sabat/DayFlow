@@ -43,9 +43,9 @@ export function LoginForm() {
     setErrors({});
     setIsSubmitting(true);
     try {
-      await login({ loginIdOrEmail: data.loginIdOrEmail, password: data.password, rememberMe: data.rememberMe });
+      const signedInUser = await login({ loginIdOrEmail: data.loginIdOrEmail, password: data.password, rememberMe: data.rememberMe });
       addToast({ type: 'success', title: 'Welcome back!', message: 'You have been signed in.' });
-      navigate(loginMode === 'admin' ? '/admin/dashboard' : '/dashboard', { replace: true });
+      navigate(signedInUser.role === 'admin' || signedInUser.role === 'hr' ? '/admin/dashboard' : '/dashboard', { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid credentials. Please try again.';
       setErrors({ loginIdOrEmail: message });
@@ -176,7 +176,7 @@ export function LoginForm() {
         {/* Create account */}
         <p className="lf-footer-text">
           Don't have an account?{' '}
-          <Link to="/create-employee" className="lf-link">Create account</Link>
+          <Link to="/register" className="lf-link">Set up organization</Link>
         </p>
 
         {/* SSL badge */}

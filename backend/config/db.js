@@ -11,7 +11,8 @@ const connectionString =
     ? `postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}/${PGDATABASE}?sslmode=require`
     : null);
 
-// creates a SQL connection using our env variables, or dummy query handler if not set
-export const sql = connectionString
-  ? neon(connectionString)
-  : (async () => []);
+if (!connectionString) {
+  throw new Error("Database configuration is missing. Set DATABASE_URL or PGHOST, PGDATABASE, PGUSER and PGPASSWORD.");
+}
+
+export const sql = neon(connectionString);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Plus, CheckCircle, Clock, XCircle, FileText, Send, X, Check, ThumbsDown } from 'lucide-react';
+import { CalendarDays, Plus, Send, X, Check, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
@@ -15,30 +15,34 @@ export function LeavesPage() {
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
 
-  const [myRequests, setMyRequests] = useState<LeaveRecord[]>([]);
+  const [requests, setRequests] = useState<LeaveRecord[]>([]);
   const [balances, setBalances] = useState<LeaveBalances>({ paidTimeOffAvailable: 24, sickTimeOffAvailable: 7 });
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const isAdminOrHr = user?.role === 'admin' || user?.role === 'hr';
 
   const loadLeavesData = () => {
-    const userId = user?.id || 1;
+    if (!user?.id) return;
+    setLoading(true);
 
     if (isAdminOrHr) {
       leaveService
         .getAdminLeaves()
         .then((records) => {
-          if (Array.isArray(records)) setMyRequests(records);
+          if (Array.isArray(records)) setRequests(records);
         })
-        .catch(() => {});
+        .catch((err) => console.error('Fetch admin leaves error:', err))
+        .finally(() => setLoading(false));
     } else {
       leaveService
-        .getMyLeaves(userId)
+        .getMyLeaves(user.id)
         .then((res) => {
-          if (res?.records) setMyRequests(res.records);
+          if (res?.records) setRequests(res.records);
           if (res?.balances) setBalances(res.balances);
         })
-        .catch(() => {});
+        .catch((err) => console.error('Fetch my leaves error:', err))
+        .finally(() => setLoading(false));
     }
   };
 
@@ -77,23 +81,10 @@ export function LeavesPage() {
       setEndDate('');
       loadLeavesData();
     } catch (err: any) {
-      // Local fallback if offline
-      const newReq: LeaveRecord = {
-        id: Date.now(),
-        leave_type: leaveType,
-        start_date: startDate,
-        end_date: endDate,
-        allocation_days: 1,
-        remarks: reason,
-        status: 'Pending',
-      };
-      setMyRequests([newReq, ...myRequests]);
-      setModalOpen(false);
-      setReason('');
       addToast({
-        type: 'success',
-        title: 'Leave Request Created',
-        message: 'Application recorded.',
+        type: 'error',
+        title: 'Submission Failed',
+        message: err.message || 'Unable to submit leave request.',
       });
     } finally {
       setSubmitting(false);
@@ -110,22 +101,13 @@ export function LeavesPage() {
       });
       loadLeavesData();
     } catch (err: any) {
-      setMyRequests(
-        myRequests.map((r) => (r.id === id ? { ...r, status: action } : r))
-      );
       addToast({
-        type: action === 'Approved' ? 'success' : 'info',
-        title: `Leave ${action}`,
-        message: `Status updated to ${action}.`,
+        type: 'error',
+        title: 'Action Failed',
+        message: err.message || `Unable to ${action.toLowerCase()} leave request.`,
       });
     }
   };
-
-  const displayRequests = myRequests.length > 0 ? myRequests : [
-    { id: '1', leave_type: 'Paid Time Off', start_date: '2026-11-01', end_date: '2026-11-05', allocation_days: 5, status: 'Pending' as const, remarks: 'Family vacation trip' },
-    { id: '2', leave_type: 'Sick Leave', start_date: '2026-09-12', end_date: '2026-09-12', allocation_days: 1, status: 'Approved' as const, remarks: 'Fever and viral infection' },
-    { id: '3', leave_type: 'Paid Time Off', start_date: '2026-08-04', end_date: '2026-08-04', allocation_days: 1, status: 'Approved' as const, remarks: 'Personal work' },
-  ];
 
   return (
     <DashboardLayout>
@@ -161,62 +143,81 @@ export function LeavesPage() {
           </div>
         )}
 
-        {/* My Requests List */}
+        {/* Requests List */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h3 className="font-extrabold text-lg text-gray-900 mb-4">
             {isAdminOrHr ? 'All Employee Leave Applications' : 'My Leave Applications'}
           </h3>
-          <div className="space-y-3">
-            {displayRequests.map((req) => (
-              <div key={req.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    {req.employee_name && (
-                      <span className="font-extrabold text-sm text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
-                        {req.employee_name} ({req.employee_id})
+
+          {loading ? (
+            <div className="flex items-center justify-center p-8 text-gray-400">
+              <Loader2 size={24} className="animate-spin text-emerald-600 mr-2" /> Loading leave applications...
+            </div>
+          ) : requests.length === 0 ? (
+            <p className="text-xs text-gray-500 italic p-6 text-center border border-dashed rounded-xl">
+              No leave applications submitted yet.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {requests.map((req) => (
+                <div
+                  key={req.id}
+                  className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      {req.employee_name && (
+                        <span className="font-extrabold text-sm text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
+                          {req.employee_name} ({req.employee_id})
+                        </span>
+                      )}
+                      <span className="font-bold text-sm text-gray-900">{req.leave_type}</span>
+                      <span className="text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
+                        {req.allocation_days || 1} Day(s)
                       </span>
-                    )}
-                    <span className="font-bold text-sm text-gray-900">{req.leave_type}</span>
-                    <span className="text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
-                      {req.allocation_days || 1} Day(s)
-                    </span>
-                  </div>
-                  <p className="text-xs font-semibold text-emerald-700 mt-0.5">
-                    {req.start_date} {req.end_date !== req.start_date ? `to ${req.end_date}` : ''}
-                  </p>
-                  {req.remarks && <p className="text-xs text-gray-500 mt-1 italic">"{req.remarks}"</p>}
-                </div>
-
-                <div className="flex items-center gap-3 self-start sm:self-center">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    req.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
-                    req.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {req.status}
-                  </span>
-
-                  {isAdminOrHr && req.status === 'Pending' && (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleAction(req.id, 'Approved')}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1"
-                        title="Approve Request"
-                      >
-                        <Check size={12} /> Approve
-                      </button>
-                      <button
-                        onClick={() => handleAction(req.id, 'Rejected')}
-                        className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg flex items-center gap-1"
-                        title="Reject Request"
-                      >
-                        <X size={12} /> Reject
-                      </button>
                     </div>
-                  )}
+                    <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                      {req.start_date} {req.end_date !== req.start_date ? `to ${req.end_date}` : ''}
+                    </p>
+                    {req.remarks && <p className="text-xs text-gray-500 mt-1 italic">"{req.remarks}"</p>}
+                  </div>
+
+                  <div className="flex items-center gap-3 self-start sm:self-center">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        req.status === 'Approved'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : req.status === 'Pending'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {req.status}
+                    </span>
+
+                    {isAdminOrHr && req.status === 'Pending' && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleAction(req.id, 'Approved')}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1"
+                          title="Approve Request"
+                        >
+                          <Check size={12} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleAction(req.id, 'Rejected')}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg flex items-center gap-1"
+                          title="Reject Request"
+                        >
+                          <X size={12} /> Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -284,7 +285,15 @@ export function LeavesPage() {
                 disabled={submitting}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 mt-2"
               >
-                <Send size={16} /> {submitting ? 'Submitting...' : 'Submit Leave Application'}
+                {submitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} /> Submit Leave Application
+                  </>
+                )}
               </button>
             </form>
           </div>

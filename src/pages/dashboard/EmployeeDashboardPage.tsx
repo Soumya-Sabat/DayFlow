@@ -4,34 +4,36 @@ import {
   Clock,
   CalendarDays,
   CreditCard,
-  CheckCircle,
   LogIn,
   LogOut,
-  MapPin,
   FileText,
   Download,
-  AlertCircle,
-  Sparkles,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import { attendanceService, AttendanceRecord } from '@/services/attendance.service';
 import { leaveService, LeaveBalances } from '@/services/leave.service';
+import { payrollService, PayslipItem } from '@/services/payroll.service';
 
 export function EmployeeDashboardPage() {
   const { addToast } = useToast();
   const { user } = useAuth();
+
   const [checkedIn, setCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
   const [daysPresent, setDaysPresent] = useState<number>(0);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalances>({
     paidTimeOffAvailable: 24,
     sickTimeOffAvailable: 7,
   });
+  const [payslips, setPayslips] = useState<PayslipItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -40,42 +42,44 @@ export function EmployeeDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch real attendance & leave metrics
+  // Fetch real attendance, leave balances, and payslips from backend
   useEffect(() => {
     if (!user?.id) return;
+    setLoading(true);
 
-    attendanceService
-      .getMyAttendance(user.id)
-      .then((data) => {
-        if (data?.logs) setAttendanceLogs(data.logs);
-        if (data?.summary?.count_days_present !== undefined) {
-          setDaysPresent(Number(data.summary.count_days_present));
+    Promise.all([
+      attendanceService.getMyAttendance(user.id),
+      leaveService.getMyLeaves(user.id),
+      payrollService.getMyPayslips(user.id),
+    ])
+      .then(([attData, leaveData, payslipData]) => {
+        if (attData?.logs) setAttendanceLogs(attData.logs);
+        if (attData?.summary?.count_days_present !== undefined) {
+          setDaysPresent(Number(attData.summary.count_days_present));
         }
-        // Check if user checked in today
+
+        // Determine if checked in today
         const todayStr = new Date().toISOString().split('T')[0];
-        const todayRecord = data?.logs?.find((l) => l.date?.startsWith(todayStr));
+        const todayRecord = attData?.logs?.find((l) => l.date?.startsWith(todayStr));
         if (todayRecord) {
           setCheckedIn(!todayRecord.check_out);
           setCheckInTime(todayRecord.check_in || null);
         }
-      })
-      .catch((err) => console.log('Attendance API notice:', err.message));
 
-    leaveService
-      .getMyLeaves(user.id)
-      .then((data) => {
-        if (data?.balances) setLeaveBalances(data.balances);
+        if (leaveData?.balances) setLeaveBalances(leaveData.balances);
+        if (Array.isArray(payslipData)) setPayslips(payslipData);
       })
-      .catch((err) => console.log('Leave API notice:', err.message));
+      .catch((err) => console.error('Dashboard data load error:', err))
+      .finally(() => setLoading(false));
   }, [user]);
 
   const handleCheckInToggle = async () => {
-    const userId = user?.id || 1;
+    if (!user?.id) return;
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     try {
       if (!checkedIn) {
-        await attendanceService.checkIn(userId);
+        await attendanceService.checkIn(user.id);
         setCheckedIn(true);
         setCheckInTime(now);
         addToast({
@@ -84,7 +88,7 @@ export function EmployeeDashboardPage() {
           message: `Check-in recorded at ${now}. Work hours are now tracking.`,
         });
       } else {
-        await attendanceService.checkOut(userId);
+        await attendanceService.checkOut(user.id);
         setCheckedIn(false);
         addToast({
           type: 'info',
@@ -93,23 +97,21 @@ export function EmployeeDashboardPage() {
         });
       }
     } catch (err: any) {
-      // Local fallback toggle if offline or demo
-      if (!checkedIn) {
-        setCheckedIn(true);
-        setCheckInTime(now);
-        addToast({
-          type: 'success',
-          title: 'Checked In!',
-          message: `Check-in recorded locally at ${now}.`,
-        });
-      } else {
-        setCheckedIn(false);
-        addToast({
-          type: 'info',
-          title: 'Checked Out!',
-          message: 'Work session ended.',
-        });
-      }
+      addToast({
+        type: 'error',
+        title: 'Action Failed',
+        message: err.message || 'Unable to log check-in/out. Please try again.',
+      });
+    }
+  };
+
+  const handlePayslipDownload = async (payslip: PayslipItem) => {
+    if (!user?.id) return;
+    try {
+      await payrollService.downloadPayslip(user.id, payslip.id, payslip.month_year);
+      addToast({ type: 'success', title: 'Payslip downloaded', message: `Downloaded payslip for ${payslip.month_year}.` });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Download failed', message: error instanceof Error ? error.message : 'Please try again.' });
     }
   };
 
@@ -204,7 +206,6 @@ export function EmployeeDashboardPage() {
                     <span className="text-xs text-gray-400 font-semibold">/ {leave.total} days</span>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="w-full bg-gray-100 h-2 rounded-full mt-3 overflow-hidden">
                     <div
                       className="bg-emerald-500 h-full rounded-full transition-all duration-500"
@@ -223,14 +224,22 @@ export function EmployeeDashboardPage() {
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
-                <Clock className="text-emerald-600" size={18} /> Monthly Attendance Log
+                <Clock className="text-emerald-600" size={18} /> Attendance Log
               </h3>
               <span className="text-xs font-semibold text-gray-500">{daysPresent} Days Present</span>
             </div>
 
-            <div className="space-y-3">
-              {attendanceLogs.length > 0 ? (
-                attendanceLogs.slice(0, 4).map((row, idx) => (
+            {loading ? (
+              <div className="flex items-center justify-center p-8 text-gray-400">
+                <Loader2 size={24} className="animate-spin text-emerald-600 mr-2" /> Loading logs...
+              </div>
+            ) : attendanceLogs.length === 0 ? (
+              <p className="text-xs text-gray-500 italic p-4 text-center border border-dashed rounded-xl">
+                No attendance logs logged yet for this month.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {attendanceLogs.slice(0, 5).map((row, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-xs">
                     <div>
                       <span className="font-bold text-gray-900 block">{row.date}</span>
@@ -246,24 +255,9 @@ export function EmployeeDashboardPage() {
                       {row.status || 'Present'}
                     </span>
                   </div>
-                ))
-              ) : (
-                [
-                  { date: 'Today', in: checkedIn ? checkInTime : '09:05 AM', out: checkedIn ? 'Working...' : '06:00 PM', status: 'Present' },
-                  { date: 'Yesterday', in: '09:12 AM', out: '06:05 PM', status: 'Present' },
-                ].map((row, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-xs">
-                    <div>
-                      <span className="font-bold text-gray-900 block">{row.date}</span>
-                      <span className="text-gray-500 text-[11px]">In: {row.in} • Out: {row.out}</span>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                      {row.status}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Quick Payslips & Docs */}
@@ -278,33 +272,39 @@ export function EmployeeDashboardPage() {
             </div>
 
             <div className="space-y-3 flex-1">
-              {[
-                { month: 'September 2026', amount: '₹68,500', date: 'Paid on Oct 01' },
-                { month: 'August 2026', amount: '₹68,500', date: 'Paid on Sep 01' },
-                { month: 'July 2026', amount: '₹68,500', date: 'Paid on Aug 01' },
-              ].map((ps, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                      <FileText size={16} />
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-900">{ps.month}</p>
-                      <p className="text-[11px] text-gray-400">{ps.date}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-gray-900">{ps.amount}</span>
-                    <button
-                      onClick={() => addToast({ type: 'success', title: 'Download Started', message: `Downloading payslip for ${ps.month}` })}
-                      className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
-                      title="Download Payslip"
-                    >
-                      <Download size={14} />
-                    </button>
-                  </div>
+              {loading ? (
+                <div className="flex items-center justify-center p-8 text-gray-400">
+                  <Loader2 size={24} className="animate-spin text-emerald-600 mr-2" /> Loading payslips...
                 </div>
-              ))}
+              ) : payslips.length === 0 ? (
+                <p className="text-xs text-gray-500 italic p-4 text-center border border-dashed rounded-xl">
+                  No payslips generated yet.
+                </p>
+              ) : (
+                payslips.slice(0, 3).map((ps, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-100 text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                        <FileText size={16} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{ps.month_year}</p>
+                        <p className="text-[11px] text-gray-400">Paid on {ps.payment_date}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-gray-900">₹{Number(ps.net_pay).toLocaleString()}</span>
+                      <button
+                        onClick={() => handlePayslipDownload(ps)}
+                        className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
+                        title="Download Payslip"
+                      >
+                        <Download size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

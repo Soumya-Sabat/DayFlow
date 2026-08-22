@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Calendar, Search, Filter, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { Clock, Download, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
@@ -9,12 +9,14 @@ export function AttendancePage() {
   const { addToast } = useToast();
   const { user } = useAuth();
   const [logs, setLogs] = useState<AttendanceRecord[]>([]);
-  const [daysPresent, setDaysPresent] = useState<number>(18);
+  const [daysPresent, setDaysPresent] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const userId = user?.id || '1';
     const role = user?.role || 'employee';
+
+    setLoading(true);
 
     if (role === 'admin' || role === 'hr') {
       attendanceService
@@ -32,15 +34,16 @@ export function AttendancePage() {
                 mode: r.employee_name || 'Office',
               }))
             );
+            setDaysPresent(res.records.length);
           }
         })
-        .catch(() => {})
+        .catch((err) => console.error('Admin attendance fetch error:', err))
         .finally(() => setLoading(false));
     } else {
       attendanceService
         .getMyAttendance(userId)
         .then((res) => {
-          if (res?.logs && res.logs.length > 0) {
+          if (res?.logs) {
             setLogs(
               res.logs.map((r) => ({
                 id: r.id,
@@ -57,18 +60,32 @@ export function AttendancePage() {
             setDaysPresent(Number(res.summary.count_days_present));
           }
         })
-        .catch(() => {})
+        .catch((err) => console.error('My attendance fetch error:', err))
         .finally(() => setLoading(false));
     }
   }, [user]);
 
-  const displayLogs = logs.length > 0 ? logs : [
-    { id: '1', date: 'Oct 24, 2026', in: '09:05 AM', out: '06:00 PM', duration: '8h 55m', status: 'Present', mode: 'Office' },
-    { id: '2', date: 'Oct 23, 2026', in: '09:12 AM', out: '06:05 PM', duration: '8h 53m', status: 'Present', mode: 'Office' },
-    { id: '3', date: 'Oct 22, 2026', in: '09:00 AM', out: '06:00 PM', duration: '9h 00m', status: 'Present', mode: 'Remote' },
-    { id: '4', date: 'Oct 21, 2026', in: '09:25 AM', out: '06:15 PM', duration: '8h 50m', status: 'Late', mode: 'Office' },
-    { id: '5', date: 'Oct 20, 2026', in: '09:02 AM', out: '06:00 PM', duration: '8h 58m', status: 'Present', mode: 'Office' },
-  ];
+  const handleExportCSV = () => {
+    if (logs.length === 0) {
+      addToast({ type: 'warning', title: 'No Data', message: 'No attendance records available to export.' });
+      return;
+    }
+
+    const headers = ['Date', 'Check In', 'Check Out', 'Total Hours', 'Employee/Mode', 'Status'];
+    const rows = logs.map((l) => [l.date, l.in || '--', l.out || '--', l.duration || '--', l.mode || 'Office', l.status]);
+    const csvContent = [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance_report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    addToast({ type: 'success', title: 'Export Complete', message: 'Attendance report exported as CSV.' });
+  };
 
   return (
     <DashboardLayout>
@@ -83,7 +100,7 @@ export function AttendancePage() {
             </p>
           </div>
           <button
-            onClick={() => addToast({ type: 'success', title: 'Export Complete', message: 'Attendance report exported as CSV.' })}
+            onClick={handleExportCSV}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-semibold text-sm rounded-xl transition-all"
           >
             <Download size={16} /> Export Attendance CSV
@@ -98,46 +115,60 @@ export function AttendancePage() {
           </div>
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Avg Working Hours</span>
-            <p className="text-3xl font-black text-gray-900 mt-2">8h 54m / day</p>
+            <p className="text-3xl font-black text-gray-900 mt-2">8h 45m / day</p>
           </div>
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Late Arrivals</span>
-            <p className="text-3xl font-black text-amber-500 mt-2">1 Day</p>
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Records Logged</span>
+            <p className="text-3xl font-black text-amber-500 mt-2">{logs.length} Days</p>
           </div>
         </div>
 
         {/* Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase">
-              <tr>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Check In</th>
-                <th className="px-6 py-4">Check Out</th>
-                <th className="px-6 py-4">Total Hours</th>
-                <th className="px-6 py-4">Employee / Mode</th>
-                <th className="px-6 py-4">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
-              {displayLogs.map((log, i) => (
-                <tr key={log.id || i} className="hover:bg-gray-50/80">
-                  <td className="px-6 py-4 font-bold text-gray-900">{log.date}</td>
-                  <td className="px-6 py-4 text-emerald-700 font-semibold">{log.in || log.check_in || '--'}</td>
-                  <td className="px-6 py-4 text-gray-600">{log.out || log.check_out || '--'}</td>
-                  <td className="px-6 py-4 font-mono text-xs">{log.duration || log.work_hours || '--'}</td>
-                  <td className="px-6 py-4 text-xs font-semibold">{log.mode || log.employee_name || 'Office'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      log.status === 'Present' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {log.status || 'Present'}
-                    </span>
-                  </td>
+          {loading ? (
+            <div className="flex items-center justify-center p-12 text-gray-400">
+              <Loader2 size={24} className="animate-spin text-emerald-600 mr-2" /> Loading attendance records...
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="p-12 text-center text-gray-500">
+              <Clock size={40} className="mx-auto text-gray-300 mb-2" />
+              <p className="font-bold">No Attendance Logs Found</p>
+              <p className="text-xs text-gray-400">Use the Clock In button on the dashboard to log today's attendance.</p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase">
+                <tr>
+                  <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Check In</th>
+                  <th className="px-6 py-4">Check Out</th>
+                  <th className="px-6 py-4">Total Hours</th>
+                  <th className="px-6 py-4">Employee / Mode</th>
+                  <th className="px-6 py-4">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
+                {logs.map((log, i) => (
+                  <tr key={log.id || i} className="hover:bg-gray-50/80">
+                    <td className="px-6 py-4 font-bold text-gray-900">{log.date}</td>
+                    <td className="px-6 py-4 text-emerald-700 font-semibold">{log.in || log.check_in || '--'}</td>
+                    <td className="px-6 py-4 text-gray-600">{log.out || log.check_out || '--'}</td>
+                    <td className="px-6 py-4 font-mono text-xs">{log.duration || log.work_hours || '--'}</td>
+                    <td className="px-6 py-4 text-xs font-semibold">{log.mode || log.employee_name || 'Office'}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                          log.status === 'Present' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {log.status || 'Present'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </DashboardLayout>

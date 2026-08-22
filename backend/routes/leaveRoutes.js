@@ -1,157 +1,43 @@
 import express from "express";
 import { sql } from "../config/db.js";
+import { ownsUserOrIsAdmin, requireAuth, requireRoles } from "../lib/auth.js";
 
 const router = express.Router();
+router.use(requireAuth);
+const daysBetween = (start, end) => Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
 
-function calculateDays(startDate, endDate) {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end - start);
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-}
-
-// 1. POST /api/leaves - Submit Time Off Request
-router.post("/", async (req, res) => {
-  const { userId, leaveType, startDate, endDate, attachment, remarks } = req.body;
-
-  if (!userId || !leaveType || !startDate || !endDate) {
-    return res.status(400).json({ error: "Missing required fields: userId, leaveType, startDate, endDate" });
-  }
-
-  const allocationDays = calculateDays(startDate, endDate);
-
+router.post("/", async (req, res, next) => {
+  const { leaveType, startDate, endDate, attachment, remarks } = req.body;
+  if (![leaveType, startDate, endDate].every((value) => typeof value === "string" && value.trim())) return res.status(400).json({ error: "Leave type, start date and end date are required." });
+  const allocationDays = daysBetween(startDate, endDate);
+  if (!Number.isInteger(allocationDays) || allocationDays < 1) return res.status(400).json({ error: "End date must be on or after the start date." });
   try {
-    const leaveRequest = await sql`
-      INSERT INTO leave_requests (
-        user_id, leave_type, start_date, end_date, allocation_days, attachment, remarks, status
-      )
-      VALUES (
-        ${userId}, ${leaveType}, ${startDate}, ${endDate}, ${allocationDays}, ${attachment || null}, ${remarks || ""}, 'Pending'
-      )
-      RETURNING *;
-    `;
-
-    if (Array.isArray(leaveRequest) && leaveRequest[0]) {
-      return res.status(201).json({
-        message: "Time Off request submitted successfully",
-        leave: leaveRequest[0],
-      });
-    }
-  } catch (error) {
-    console.warn("Leave creation DB error:", error.message);
-  }
-
-  res.status(201).json({
-    message: "Time Off request submitted successfully",
-    leave: {
-      id: Date.now(),
-      user_id: userId,
-      leave_type: leaveType,
-      start_date: startDate,
-      end_date: endDate,
-      allocation_days: allocationDays,
-      remarks,
-      status: "Pending",
-    },
-  });
+    const rows = await sql`INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, allocation_days, attachment, remarks, status) VALUES (${req.user.id}, ${leaveType.trim()}, ${startDate}, ${endDate}, ${allocationDays}, ${attachment || null}, ${remarks?.trim() || null}, 'Pending') RETURNING *;`;
+    res.status(201).json({ message: "Time off request submitted successfully", leave: rows[0] });
+  } catch (error) { next(error); }
 });
 
-// 2. GET /api/leaves/my-leaves/:userId - Employee View
-router.get("/my-leaves/:userId", async (req, res) => {
-  const { userId } = req.params;
-
+router.get("/my-leaves/:userId", async (req, res, next) => {
+  if (!ownsUserOrIsAdmin(req, req.params.userId)) return res.status(403).json({ error: "You can only view your own leave requests." });
   try {
-    const leaves = await sql`
-      SELECT 
-        id, 
-        leave_type, 
-        TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date, 
-        TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date, 
-        COALESCE(allocation_days, 1.0) AS allocation_days, 
-        remarks, 
-        status
-      FROM leave_requests 
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC;
-    `;
-
-    if (Array.isArray(leaves) && leaves.length > 0) {
-      return res.status(200).json({
-        balances: { paidTimeOffAvailable: 24, sickTimeOffAvailable: 7 },
-        records: leaves,
-      });
-    }
-  } catch (error) {
-    console.warn("My leaves DB error:", error.message);
-  }
-
-  res.status(200).json({
-    balances: { paidTimeOffAvailable: 24, sickTimeOffAvailable: 7 },
-    records: [
-      { id: 1, leave_type: 'Paid Time Off', start_date: '2026-11-01', end_date: '2026-11-05', allocation_days: 5, status: 'Pending', remarks: 'Family trip' },
-      { id: 2, leave_type: 'Sick Leave', start_date: '2026-09-12', end_date: '2026-09-12', allocation_days: 1, status: 'Approved', remarks: 'Fever' }
-    ],
-  });
+    const records = await sql`SELECT id, leave_type, TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date, TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date, allocation_days, attachment, remarks, status, created_at FROM leave_requests WHERE user_id = ${req.params.userId} ORDER BY created_at DESC;`;
+    const balances = await sql`SELECT GREATEST(0, 24 - COALESCE(SUM(allocation_days) FILTER (WHERE leave_type = 'Paid Time Off' AND status IN ('Pending', 'Approved')), 0)) AS "paidTimeOffAvailable", GREATEST(0, 7 - COALESCE(SUM(allocation_days) FILTER (WHERE leave_type = 'Sick Leave' AND status IN ('Pending', 'Approved')), 0)) AS "sickTimeOffAvailable" FROM leave_requests WHERE user_id = ${req.params.userId};`;
+    res.json({ balances: balances[0], records });
+  } catch (error) { next(error); }
 });
 
-// 3. GET /api/leaves/admin-view - Admin/HR View
-router.get("/admin-view", async (req, res) => {
-  try {
-    const leaves = await sql`
-      SELECT 
-        l.id,
-        u.name AS employee_name,
-        u.employee_id,
-        l.leave_type,
-        TO_CHAR(l.start_date, 'YYYY-MM-DD') AS start_date,
-        TO_CHAR(l.end_date, 'YYYY-MM-DD') AS end_date,
-        COALESCE(l.allocation_days, 1.0) AS allocation_days,
-        l.remarks,
-        l.status
-      FROM leave_requests l
-      JOIN users u ON l.user_id = u.id
-      ORDER BY l.created_at DESC;
-    `;
-
-    if (Array.isArray(leaves) && leaves.length > 0) {
-      return res.status(200).json(leaves);
-    }
-  } catch (error) {
-    console.warn("Admin leaves DB error:", error.message);
-  }
-
-  res.status(200).json([
-    { id: 1, employee_name: 'Alex Rivera', employee_id: 'DF-EMP-2024-002', leave_type: 'Sick Leave', start_date: '2026-10-24', end_date: '2026-10-25', allocation_days: 2, remarks: 'Doctor consultation', status: 'Pending' },
-    { id: 2, employee_name: 'Priya Sharma', employee_id: 'DF-EMP-2024-003', leave_type: 'Paid Time Off', start_date: '2026-10-26', end_date: '2026-10-26', allocation_days: 1, remarks: 'Family function', status: 'Pending' },
-  ]);
+router.get("/admin-view", requireRoles("Admin", "HR"), async (_req, res, next) => {
+  try { res.json(await sql`SELECT l.id, u.name AS employee_name, u.employee_id, l.leave_type, TO_CHAR(l.start_date, 'YYYY-MM-DD') AS start_date, TO_CHAR(l.end_date, 'YYYY-MM-DD') AS end_date, l.allocation_days, l.remarks, l.status FROM leave_requests l JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC;`); } catch (error) { next(error); }
 });
 
-// 4. PUT /api/leaves/:id/action - Admin Inline Action
-router.put("/:id/action", async (req, res) => {
+router.put("/:id/action", requireRoles("Admin", "HR"), async (req, res, next) => {
   const { action, adminComments } = req.body;
-
+  if (!["Approved", "Rejected"].includes(action)) return res.status(400).json({ error: "Action must be Approved or Rejected." });
   try {
-    const updatedLeave = await sql`
-      UPDATE leave_requests
-      SET status = ${action}, admin_comments = ${adminComments || null}
-      WHERE id = ${req.params.id}
-      RETURNING *;
-    `;
-
-    if (Array.isArray(updatedLeave) && updatedLeave[0]) {
-      return res.status(200).json({
-        message: `Leave request ${action.toLowerCase()} successfully`,
-        leave: updatedLeave[0],
-      });
-    }
-  } catch (error) {
-    console.warn("Leave action DB error:", error.message);
-  }
-
-  res.status(200).json({
-    message: `Leave request ${action.toLowerCase()} successfully`,
-    leave: { id: req.params.id, status: action },
-  });
+    const rows = await sql`UPDATE leave_requests SET status = ${action}, admin_comments = ${adminComments?.trim() || null} WHERE id = ${req.params.id} AND status = 'Pending' RETURNING *;`;
+    if (!rows[0]) return res.status(404).json({ error: "Pending leave request not found." });
+    res.json({ message: `Leave request ${action.toLowerCase()} successfully`, leave: rows[0] });
+  } catch (error) { next(error); }
 });
 
 export default router;

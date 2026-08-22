@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, Building, Lock, Shield, CheckCircle, Save } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -13,6 +13,7 @@ export function ProfilePage() {
   const [email, setEmail] = useState(user?.email || 'sarah.johnson@dayflow.com');
   const [phone, setPhone] = useState('+91 98765 43210');
   const [dept, setDept] = useState('Human Resources');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -23,18 +24,39 @@ export function ProfilePage() {
           if (profile.name) setName(profile.name);
           if (profile.email) setEmail(profile.email);
           if (profile.phone) setPhone(profile.phone);
+          if (profile.department) setDept(profile.department);
         }
       })
-      .catch(() => {});
+      .catch((err) => console.error('Fetch profile error:', err));
   }, [user]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    addToast({
-      type: 'success',
-      title: 'Profile Updated',
-      message: 'Your personal information has been saved.',
-    });
+    if (!user?.id) return;
+
+    setSaving(true);
+    try {
+      await employeeService.updateProfile(user.id, {
+        name,
+        email,
+        phone,
+        department: dept,
+      });
+
+      addToast({
+        type: 'success',
+        title: 'Profile Updated',
+        message: 'Your personal information has been saved successfully to the database.',
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: err.message || 'Unable to update profile. Please try again.',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -99,9 +121,18 @@ export function ProfilePage() {
           <div className="pt-4 border-t border-gray-100 flex justify-end">
             <button
               type="submit"
+              disabled={saving}
               className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2"
             >
-              <Save size={16} /> Save Profile Changes
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} /> Save Profile Changes
+                </>
+              )}
             </button>
           </div>
         </form>

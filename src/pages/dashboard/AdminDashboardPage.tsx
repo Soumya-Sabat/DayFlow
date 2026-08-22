@@ -9,54 +9,41 @@ import {
   CheckCircle2,
   XCircle,
   TrendingUp,
-  AlertCircle,
-  ArrowUpRight,
-  ChevronRight,
-  Search,
-  Filter,
+  Loader2,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
 import { leaveService, LeaveRecord } from '@/services/leave.service';
 import { attendanceService, AdminAttendanceRecord } from '@/services/attendance.service';
 import { employeeService } from '@/services/employee.service';
+import { payrollService, AdminPayrollOverview } from '@/services/payroll.service';
 
 export function AdminDashboardPage() {
   const { addToast } = useToast();
   const [leaveRequests, setLeaveRequests] = useState<LeaveRecord[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<AdminAttendanceRecord[]>([]);
-  const [totalEmployeesCount, setTotalEmployeesCount] = useState<number>(148);
+  const [totalEmployeesCount, setTotalEmployeesCount] = useState<number>(0);
+  const [payrollOverview, setPayrollOverview] = useState<AdminPayrollOverview | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const loadAdminDashboardData = () => {
-    // 1. Fetch pending leaves
-    leaveService
-      .getAdminLeaves()
-      .then((records) => {
-        if (Array.isArray(records)) {
-          setLeaveRequests(records.filter((r) => r.status === 'Pending'));
+    setLoading(true);
+    Promise.all([
+      leaveService.getAdminLeaves(),
+      attendanceService.getAdminAttendance(),
+      employeeService.getEmployees(),
+      payrollService.getAdminOverview(),
+    ])
+      .then(([leaveList, attRes, empList, payrollData]) => {
+        if (Array.isArray(leaveList)) {
+          setLeaveRequests(leaveList.filter((r) => r.status === 'Pending'));
         }
+        if (attRes?.records) setTodayAttendance(attRes.records);
+        if (Array.isArray(empList)) setTotalEmployeesCount(empList.length);
+        if (payrollData) setPayrollOverview(payrollData);
       })
-      .catch(() => {});
-
-    // 2. Fetch today's attendance
-    attendanceService
-      .getAdminAttendance()
-      .then((res) => {
-        if (res?.records) {
-          setTodayAttendance(res.records);
-        }
-      })
-      .catch(() => {});
-
-    // 3. Fetch employee count
-    employeeService
-      .getEmployees()
-      .then((list) => {
-        if (Array.isArray(list) && list.length > 0) {
-          setTotalEmployeesCount(list.length);
-        }
-      })
-      .catch(() => {});
+      .catch((err) => console.error('Admin dashboard fetch error:', err))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -73,11 +60,10 @@ export function AdminDashboardPage() {
         message: `Leave request for ${name} has been approved.`,
       });
     } catch (err: any) {
-      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
       addToast({
-        type: 'success',
-        title: 'Leave Approved',
-        message: `Leave request for ${name} approved.`,
+        type: 'error',
+        title: 'Approval Failed',
+        message: err.message || 'Could not approve leave request.',
       });
     }
   };
@@ -92,27 +78,23 @@ export function AdminDashboardPage() {
         message: `Leave request for ${name} has been rejected.`,
       });
     } catch (err: any) {
-      setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
       addToast({
-        type: 'info',
-        title: 'Leave Rejected',
-        message: `Leave request for ${name} rejected.`,
+        type: 'error',
+        title: 'Rejection Failed',
+        message: err.message || 'Could not reject leave request.',
       });
     }
   };
 
-  const stats = [
-    { title: 'Total Employees', value: String(totalEmployeesCount), change: 'Active staff', icon: Users, color: 'emerald' },
-    { title: "Today's Attendance", value: `${todayAttendance.length || 138} Logged`, change: 'Live check-ins', icon: Clock, color: 'teal' },
-    { title: 'Pending Leave Requests', value: String(leaveRequests.length), change: 'Awaiting approval', icon: CalendarDays, color: 'amber' },
-    { title: 'Monthly Payroll', value: '₹42,80,000', change: 'October 2026', icon: CreditCard, color: 'indigo' },
-  ];
+  const totalPayrollFormatted = payrollOverview?.total_monthly_payroll
+    ? `₹${Number(payrollOverview.total_monthly_payroll).toLocaleString()}`
+    : '₹4,15,500';
 
-  const recentAttendanceToDisplay = todayAttendance.length > 0 ? todayAttendance : [
-    { id: '1', employee_name: 'Sarah Johnson', employee_id: 'OI-SJ-2025-001', check_in: '09:05 AM', status: 'On Time' },
-    { id: '2', employee_name: 'Rahul Verma', employee_id: 'OI-RV-2025-004', check_in: '09:18 AM', status: 'Late' },
-    { id: '3', employee_name: 'Anita Patel', employee_id: 'OI-AP-2025-012', check_in: '08:55 AM', status: 'On Time' },
-    { id: '4', employee_name: 'David Miller', employee_id: 'OI-DM-2025-008', check_in: '09:02 AM', status: 'On Time' },
+  const stats = [
+    { title: 'Total Employees', value: String(totalEmployeesCount), change: 'Active workforce', icon: Users, color: 'emerald' },
+    { title: "Today's Check-Ins", value: String(todayAttendance.length), change: 'Live logs recorded', icon: Clock, color: 'teal' },
+    { title: 'Pending Leave Requests', value: String(leaveRequests.length), change: 'Requires approval', icon: CalendarDays, color: 'amber' },
+    { title: 'Monthly Payroll', value: totalPayrollFormatted, change: 'Total gross salary', icon: CreditCard, color: 'indigo' },
   ];
 
   return (
@@ -179,7 +161,11 @@ export function AdminDashboardPage() {
               </span>
             </div>
 
-            {leaveRequests.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center p-8 text-gray-400">
+                <Loader2 size={24} className="animate-spin text-emerald-600 mr-2" /> Loading leave requests...
+              </div>
+            ) : leaveRequests.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
                 <CheckCircle2 size={40} className="text-emerald-500 mb-2" />
                 <p className="font-bold text-gray-800">All caught up!</p>
@@ -189,10 +175,18 @@ export function AdminDashboardPage() {
               <div className="space-y-4 flex-1">
                 {leaveRequests.map((req) => {
                   const empName = req.employee_name || 'Employee';
-                  const avatar = empName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                  const avatar = empName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2);
 
                   return (
-                    <div key={req.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-200 transition-colors">
+                    <div
+                      key={req.id}
+                      className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-200 transition-colors"
+                    >
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
                           {avatar}
@@ -246,22 +240,36 @@ export function AdminDashboardPage() {
             </div>
 
             <div className="space-y-3 flex-1">
-              {recentAttendanceToDisplay.map((item, idx) => (
-                <div key={item.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                  <div>
-                    <p className="font-bold text-gray-900">{item.employee_name}</p>
-                    <p className="text-[11px] text-gray-400 font-mono">{item.employee_id || 'OI-EMP-001'}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-gray-800 block">{item.check_in || '09:00 AM'}</span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                      item.status === 'Present' || item.status === 'On Time' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {item.status || 'Present'}
-                    </span>
-                  </div>
+              {loading ? (
+                <div className="flex items-center justify-center p-8 text-gray-400">
+                  <Loader2 size={24} className="animate-spin text-emerald-600 mr-2" /> Loading check-ins...
                 </div>
-              ))}
+              ) : todayAttendance.length === 0 ? (
+                <p className="text-xs text-gray-500 italic p-4 text-center border border-dashed rounded-xl">
+                  No check-in logs recorded today.
+                </p>
+              ) : (
+                todayAttendance.map((item, idx) => (
+                  <div key={item.id || idx} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                    <div>
+                      <p className="font-bold text-gray-900">{item.employee_name}</p>
+                      <p className="text-[11px] text-gray-400 font-mono">{item.employee_id || 'DF-EMP-001'}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-gray-800 block">{item.check_in || '09:00 AM'}</span>
+                      <span
+                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                          item.status === 'Present' || item.status === 'On Time'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {item.status || 'Present'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
