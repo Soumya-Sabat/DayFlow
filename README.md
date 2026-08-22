@@ -62,6 +62,8 @@ ARCJET_ENV=
 ARCJET_KEY=
 ```
 
-## Design
+## Workflow vedio 
+Link - https://drive.google.com/file/d/1L_AOuWC92tAhd5tEUk_ntWWHa2quDF3s/view?usp=sharing
 
-Wireframes: https://link.excalidraw.com/l/65VNwvy7c4X/58RLEJ4oOwh
+## Explained vedio 
+Link - https://drive.google.com/file/d/1q5JKVu89JPi1YwQpJYLOUyyHGqdgGMYj/view?usp=drivesdk
