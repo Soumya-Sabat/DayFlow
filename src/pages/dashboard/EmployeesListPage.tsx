@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Search, Filter, UserPlus, Loader2 } from 'lucide-react';
+import { Users, Search, Filter, UserPlus, Loader2, Trash2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
 import { employeeService, EmployeeProfile } from '@/services/employee.service';
+import { useAuth } from '@/context/AuthContext';
 
 export function EmployeesListPage() {
   const { addToast } = useToast();
+  const { user } = useAuth();
+  const isSystemAdmin = user?.role === 'admin';
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
@@ -35,6 +38,15 @@ export function EmployeesListPage() {
     return matchSearch && matchRole;
   });
 
+  const handleDelete = async (employee: EmployeeProfile) => {
+    if (!window.confirm(`Delete ${employee.name}? This permanently removes their account and records.`)) return;
+    try {
+      await employeeService.deleteEmployee(employee.id);
+      setEmployees((current) => current.filter((item) => item.id !== employee.id));
+      addToast({ type: 'success', title: 'Employee deleted', message: `${employee.name} has been removed.` });
+    } catch (error) { addToast({ type: 'error', title: 'Delete failed', message: error instanceof Error ? error.message : undefined }); }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-in fade-in duration-300">
@@ -48,12 +60,12 @@ export function EmployeesListPage() {
               View, search, and manage all organization employees and credentials.
             </p>
           </div>
-          <Link
+          {isSystemAdmin && <Link
             to="/create-employee"
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-all"
           >
             <UserPlus size={16} /> Add Employee
-          </Link>
+          </Link>}
         </div>
 
         {/* Filter Controls */}
@@ -165,6 +177,7 @@ export function EmployeesListPage() {
                           >
                             View Details
                           </button>
+                          {isSystemAdmin && roleLower !== 'admin' && <button onClick={() => handleDelete(emp)} className="ml-2 p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50" title={`Delete ${emp.name}`} aria-label={`Delete ${emp.name}`}><Trash2 size={14} /></button>}
                         </td>
                       </tr>
                     );

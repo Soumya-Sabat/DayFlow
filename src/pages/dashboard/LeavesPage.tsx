@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Plus, Send, X, Check, Loader2 } from 'lucide-react';
+import { CalendarDays, Plus, Send, X, Check, Loader2, RefreshCw } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
@@ -19,12 +19,14 @@ export function LeavesPage() {
   const [balances, setBalances] = useState<LeaveBalances>({ paidTimeOffAvailable: 24, sickTimeOffAvailable: 7 });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const isAdminOrHr = user?.role === 'admin' || user?.role === 'hr';
 
   const loadLeavesData = () => {
     if (!user?.id) return;
     setLoading(true);
+    setLoadError('');
 
     if (isAdminOrHr) {
       leaveService
@@ -32,7 +34,7 @@ export function LeavesPage() {
         .then((records) => {
           if (Array.isArray(records)) setRequests(records);
         })
-        .catch((err) => console.error('Fetch admin leaves error:', err))
+        .catch((err) => { setLoadError(err instanceof Error ? err.message : 'Unable to load leave requests.'); })
         .finally(() => setLoading(false));
     } else {
       leaveService
@@ -41,7 +43,7 @@ export function LeavesPage() {
           if (res?.records) setRequests(res.records);
           if (res?.balances) setBalances(res.balances);
         })
-        .catch((err) => console.error('Fetch my leaves error:', err))
+        .catch((err) => { setLoadError(err instanceof Error ? err.message : 'Unable to load leave requests.'); })
         .finally(() => setLoading(false));
     }
   };
@@ -121,12 +123,12 @@ export function LeavesPage() {
               Apply for leave, view approval statuses, and check remaining leave balances.
             </p>
           </div>
-          <button
+          {!isAdminOrHr && <button
             onClick={() => setModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-all"
           >
             <Plus size={16} /> Apply For Leave
-          </button>
+          </button>}
         </div>
 
         {/* Leave Balances Header if Employee */}
@@ -148,6 +150,8 @@ export function LeavesPage() {
           <h3 className="font-extrabold text-lg text-gray-900 mb-4">
             {isAdminOrHr ? 'All Employee Leave Applications' : 'My Leave Applications'}
           </h3>
+
+          {loadError && <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"><span>{loadError}</span><button onClick={loadLeavesData} className="font-bold underline">Retry</button></div>}
 
           {loading ? (
             <div className="flex items-center justify-center p-8 text-gray-400">
@@ -218,6 +222,7 @@ export function LeavesPage() {
               ))}
             </div>
           )}
+          <button onClick={loadLeavesData} className="mt-5 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:underline"><RefreshCw size={13} /> Refresh requests</button>
         </div>
       </div>
 

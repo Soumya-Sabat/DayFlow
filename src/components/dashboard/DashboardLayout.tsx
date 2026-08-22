@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -15,9 +15,12 @@ import {
   X,
   UserPlus,
   Building,
+  MessageCircle,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { messageService, type DirectMessage, type MessageContact } from '@/services/message.service';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,6 +33,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { addToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [contacts, setContacts] = useState<MessageContact[]>([]);
+  const [selectedContact, setSelectedContact] = useState<MessageContact | null>(null);
+  const [messages, setMessages] = useState<DirectMessage[]>([]);
+  const [messageText, setMessageText] = useState('');
+
+  useEffect(() => {
+    if (!messagesOpen) return;
+    messageService.getContacts().then(setContacts).catch(() => addToast({ type: 'error', title: 'Messages unavailable', message: 'Unable to load contacts.' }));
+  }, [messagesOpen]);
+
+  useEffect(() => {
+    if (!selectedContact) return;
+    messageService.getConversation(selectedContact.id).then(setMessages).catch(() => addToast({ type: 'error', title: 'Conversation unavailable' }));
+  }, [selectedContact]);
+
+  const sendMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedContact || !messageText.trim()) return;
+    try {
+      const message = await messageService.send(selectedContact.id, messageText);
+      setMessages((current) => [...current, message]);
+      setMessageText('');
+    } catch (error) { addToast({ type: 'error', title: 'Message not sent', message: error instanceof Error ? error.message : undefined }); }
+  };
 
   // Fallback demo user if null
   const currentUser = user || {
@@ -59,7 +87,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     { label: 'Attendance Log', path: '/admin/attendance', icon: Clock },
     { label: 'Leave Requests', path: '/admin/leaves', icon: CalendarDays },
     { label: 'Payroll Overview', path: '/admin/payroll', icon: CreditCard },
-    { label: 'Create Employee', path: '/create-employee', icon: UserPlus },
+    ...(currentUser.role === 'admin' ? [{ label: 'Create Employee', path: '/create-employee', icon: UserPlus }] : []),
   ];
 
   const employeeNav = [
@@ -140,6 +168,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* User Footer Profile */}
         <div className="p-4 border-t border-white/10 bg-black/20">
+          <button onClick={() => setMessagesOpen(true)} className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors">
+            <MessageCircle size={14} /> Messages
+          </button>
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-white font-bold flex items-center justify-center text-sm shadow-md">
               {currentUser.name.slice(0, 2).toUpperCase()}
@@ -157,6 +188,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </button>
         </div>
       </aside>
+
+      {messagesOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/40 p-4 flex justify-end" onClick={() => setMessagesOpen(false)}>
+          <section className="w-full max-w-2xl h-full bg-white rounded-2xl shadow-2xl flex overflow-hidden" onClick={(event) => event.stopPropagation()}>
+            <div className="w-2/5 border-r border-gray-200 flex flex-col"><div className="p-5 border-b"><div className="flex justify-between items-center"><h2 className="font-extrabold text-gray-900">Messages</h2><button onClick={() => setMessagesOpen(false)} className="text-gray-500"><X size={20} /></button></div><p className="text-xs text-gray-500 mt-1">Talk with HR and your coworkers.</p></div><div className="overflow-y-auto">{contacts.length === 0 ? <p className="p-5 text-xs text-gray-500">No other users are available to message yet.</p> : contacts.map((contact) => <button key={contact.id} onClick={() => setSelectedContact(contact)} className={`w-full text-left p-4 border-b hover:bg-gray-50 ${selectedContact?.id === contact.id ? 'bg-emerald-50' : ''}`}><div className="flex justify-between gap-2"><span className="font-bold text-sm text-gray-900 truncate">{contact.name}</span>{contact.unread_count > 0 && <span className="bg-emerald-600 text-white text-[10px] rounded-full px-1.5">{contact.unread_count}</span>}</div><span className="text-xs text-gray-500 capitalize">{contact.role}</span></button>)}</div></div>
+            <div className="flex-1 flex flex-col">{selectedContact ? <><div className="p-5 border-b"><p className="font-bold text-gray-900">{selectedContact.name}</p><p className="text-xs text-gray-500 capitalize">{selectedContact.role}</p></div><div className="flex-1 overflow-y-auto p-4 space-y-3">{messages.length === 0 && <p className="text-sm text-gray-500 text-center mt-12">Start the conversation.</p>}{messages.map((message) => <div key={message.id} className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${String(message.sender_id) === String(currentUser.id) ? 'ml-auto bg-emerald-600 text-white' : 'bg-gray-100 text-gray-800'}`}>{message.body}<div className="text-[10px] opacity-70 mt-1">{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div>)}</div><form onSubmit={sendMessage} className="p-4 border-t flex gap-2"><input value={messageText} onChange={(event) => setMessageText(event.target.value)} className="flex-1 border rounded-xl px-3 py-2 text-sm" maxLength={2000} placeholder="Write a message…" /><button className="bg-emerald-600 text-white p-2 rounded-xl" type="submit" aria-label="Send message"><Send size={18} /></button></form></> : <div className="m-auto text-sm text-gray-500">Select a contact to start chatting.</div>}</div>
+          </section>
+        </div>
+      )}
 
       {/* ── Main Content Container ── */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -183,7 +223,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           <div className="flex items-center gap-4">
             {/* Quick Create Employee Link for Admin */}
-            {isAdmin && (
+            {currentUser.role === 'admin' && (
               <Link
                 to="/create-employee"
                 className="hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold transition-colors"

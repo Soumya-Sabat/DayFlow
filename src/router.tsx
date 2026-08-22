@@ -19,10 +19,27 @@ import { AttendancePage } from '@/pages/dashboard/AttendancePage';
 import { LeavesPage } from '@/pages/dashboard/LeavesPage';
 import { PayrollPage } from '@/pages/dashboard/PayrollPage';
 import { ProfilePage } from '@/pages/dashboard/ProfilePage';
+import { useAuth } from '@/context/AuthContext';
 
 // Shell Wrapper
 function PageShell() {
   return <Outlet />;
+}
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return null;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  return role === 'admin' || role === 'hr' ? <>{children}</> : <Navigate to="/dashboard" replace />;
+}
+
+function RequireSystemAdmin({ children }: { children: React.ReactNode }) {
+  const { role } = useAuth();
+  return role === 'admin' ? <>{children}</> : <Navigate to="/dashboard" replace />;
 }
 
 export const router = createBrowserRouter([
@@ -36,7 +53,7 @@ export const router = createBrowserRouter([
       { path: 'login', element: <LoginPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
       { path: 'change-password', element: <ChangePasswordPage /> },
-      { path: 'create-employee', element: <CreateEmployeePage /> },
+      { path: 'create-employee', element: <RequireAuth><RequireSystemAdmin><CreateEmployeePage /></RequireSystemAdmin></RequireAuth> },
       { path: 'account-created', element: <AccountCreatedPage /> },
       { path: 'register', element: <RegisterAdminPage /> },
     ],
@@ -46,11 +63,11 @@ export const router = createBrowserRouter([
   {
     element: <PageShell />,
     children: [
-      { path: 'admin/dashboard', element: <AdminDashboardPage /> },
-      { path: 'admin/employees', element: <EmployeesListPage /> },
-      { path: 'admin/attendance', element: <AttendancePage /> },
-      { path: 'admin/leaves', element: <LeavesPage /> },
-      { path: 'admin/payroll', element: <PayrollPage /> },
+      { path: 'admin/dashboard', element: <RequireAuth><RequireAdmin><AdminDashboardPage /></RequireAdmin></RequireAuth> },
+      { path: 'admin/employees', element: <RequireAuth><RequireAdmin><EmployeesListPage /></RequireAdmin></RequireAuth> },
+      { path: 'admin/attendance', element: <RequireAuth><RequireAdmin><AttendancePage /></RequireAdmin></RequireAuth> },
+      { path: 'admin/leaves', element: <RequireAuth><RequireAdmin><LeavesPage /></RequireAdmin></RequireAuth> },
+      { path: 'admin/payroll', element: <RequireAuth><RequireAdmin><PayrollPage /></RequireAdmin></RequireAuth> },
     ],
   },
 
@@ -58,11 +75,11 @@ export const router = createBrowserRouter([
   {
     element: <PageShell />,
     children: [
-      { path: 'dashboard', element: <EmployeeDashboardPage /> },
-      { path: 'attendance', element: <AttendancePage /> },
-      { path: 'leaves', element: <LeavesPage /> },
-      { path: 'payroll', element: <PayrollPage /> },
-      { path: 'profile', element: <ProfilePage /> },
+      { path: 'dashboard', element: <RequireAuth><EmployeeDashboardPage /></RequireAuth> },
+      { path: 'attendance', element: <RequireAuth><AttendancePage /></RequireAuth> },
+      { path: 'leaves', element: <RequireAuth><LeavesPage /></RequireAuth> },
+      { path: 'payroll', element: <RequireAuth><PayrollPage /></RequireAuth> },
+      { path: 'profile', element: <RequireAuth><ProfilePage /></RequireAuth> },
     ],
   },
 

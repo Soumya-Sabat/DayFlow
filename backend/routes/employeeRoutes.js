@@ -9,7 +9,7 @@ router.use(requireAuth);
 const employeeId = (companyCode, firstName, lastName, year, serial) =>
   `${(companyCode || "DF").replace(/[^a-z]/gi, "").slice(0, 4).toUpperCase()}${(firstName || "E").slice(0, 2)}${(lastName || "U").slice(0, 2)}${year}${String(serial).padStart(4, "0")}`.toUpperCase();
 
-router.post("/", requireRoles("Admin", "HR"), async (req, res, next) => {
+router.post("/", requireRoles("Admin"), async (req, res, next) => {
   const { firstName, lastName, email, phone, companyCode, companyName, joiningDate, department, salary = 0 } = req.body;
   if (![firstName, email].every((value) => typeof value === "string" && value.trim())) return res.status(400).json({ error: "Employee name and email are required." });
   try {
@@ -57,6 +57,15 @@ router.put("/:id", async (req, res, next) => {
     if (error.code === "23505") return res.status(409).json({ error: "That email is already in use." });
     next(error);
   }
+});
+
+router.delete("/:id", requireRoles("Admin"), async (req, res, next) => {
+  if (String(req.user.id) === String(req.params.id)) return res.status(400).json({ error: "You cannot delete your own administrator account." });
+  try {
+    const rows = await sql`DELETE FROM users WHERE id = ${req.params.id} RETURNING id, name;`;
+    if (!rows[0]) return res.status(404).json({ error: "Employee not found." });
+    res.json({ message: "Employee deleted successfully", employee: rows[0] });
+  } catch (error) { next(error); }
 });
 
 router.get("/:id/salary", async (req, res, next) => {

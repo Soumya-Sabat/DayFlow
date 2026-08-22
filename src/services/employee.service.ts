@@ -45,4 +45,7 @@ export const employeeService = {
   async getEmployeeSalary(id: string | number): Promise<EmployeeSalaryInfo> {
     return apiRequest<EmployeeSalaryInfo>(`/employees/${id}/salary`);
   },
+  async deleteEmployee(id: string | number) {
+    return apiRequest<{ message: string }>(`/employees/${id}`, { method: 'DELETE' });
+  },
 };

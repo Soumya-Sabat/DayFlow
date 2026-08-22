@@ -10,6 +10,7 @@ import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leaveRoutes from "./routes/leaveRoutes.js";
 import payrollRoutes from "./routes/payrollRoutes.js";
+import messageRoutes from "./routes/messageRoutes.js";
 
 import { sql } from "./config/db.js";
 
@@ -27,6 +28,10 @@ app.use(
   })
 );
 app.use(morgan("dev"));
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 app.get("/api/health", async (_req, res, next) => {
   try {
     await sql`SELECT 1`;
@@ -74,6 +79,7 @@ app.use("/api/employees", employeeRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/payroll", payrollRoutes);
+app.use("/api/messages", messageRoutes);
 
 // Initialize HRMS Database Tables & Seed Sample Data
 async function initDB() {
@@ -184,6 +190,17 @@ async function initDB() {
         token VARCHAR(128) UNIQUE NOT NULL,
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        sender_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        recipient_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CHECK (sender_id <> recipient_id)
       );
     `;
 
