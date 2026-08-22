@@ -9,8 +9,8 @@ export const aj = arcjet({
   key: process.env.ARCJET_KEY,
   characteristics: isDevelopment ? [] : ["ip.src"],
   rules: [
-    // shield protects your app from common attacks e.g. SQL injection, XSS, CSRF attacks
-    shield({ mode: isDevelopment ? "DRY_RUN" : "LIVE" }),
+    // shield protects our app from common attacks e.g. SQL injection, XSS, CSRF attacks
+    shield({ mode: "LIVE" }),
     detectBot({
       mode: isDevelopment ? "DRY_RUN" : "LIVE",
       // block all bots except search engines
@@ -19,7 +19,7 @@ export const aj = arcjet({
         // see the full list at https://arcjet.com/bot-list
       ],
     }),
-    // rate limiting
+    // rate limiting here
     tokenBucket({
       mode: isDevelopment ? "DRY_RUN" : "LIVE",
       refillRate: 30,
