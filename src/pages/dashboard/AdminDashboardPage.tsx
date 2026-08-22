@@ -1,0 +1,222 @@
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Users,
+  Clock,
+  CalendarDays,
+  CreditCard,
+  UserPlus,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  AlertCircle,
+  ArrowUpRight,
+  ChevronRight,
+  Search,
+  Filter,
+} from 'lucide-react';
+import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
+import { useToast } from '@/context/ToastContext';
+
+export function AdminDashboardPage() {
+  const { addToast } = useToast();
+
+  const [leaveRequests, setLeaveRequests] = useState([
+    { id: 'lr-1', name: 'Alex Rivera', role: 'Frontend Engineer', type: 'Sick Leave', duration: '2 Days (Oct 24 - Oct 25)', reason: 'Fever and doctor consultation', avatar: 'AR' },
+    { id: 'lr-2', name: 'Priya Sharma', role: 'UI/UX Designer', type: 'Casual Leave', duration: '1 Day (Oct 26)', reason: 'Family function', avatar: 'PS' },
+    { id: 'lr-3', name: 'Michael Chen', role: 'DevOps Engineer', type: 'Annual Leave', duration: '5 Days (Nov 01 - Nov 05)', reason: 'Vacation trip', avatar: 'MC' },
+  ]);
+
+  const handleApprove = (id: string, name: string) => {
+    setLeaveRequests(prev => prev.filter(r => r.id !== id));
+    addToast({
+      type: 'success',
+      title: 'Leave Approved',
+      message: `Leave request for ${name} has been approved.`,
+    });
+  };
+
+  const handleReject = (id: string, name: string) => {
+    setLeaveRequests(prev => prev.filter(r => r.id !== id));
+    addToast({
+      type: 'info',
+      title: 'Leave Rejected',
+      message: `Leave request for ${name} has been rejected.`,
+    });
+  };
+
+  const stats = [
+    { title: 'Total Employees', value: '148', change: '+12 this month', icon: Users, color: 'emerald' },
+    { title: "Today's Attendance", value: '94.2%', change: '138 Present / 10 Absent', icon: Clock, color: 'teal' },
+    { title: 'Employees On Leave', value: '6', change: '3 Pending approval', icon: CalendarDays, color: 'amber' },
+    { title: 'Monthly Payroll', value: '₹42,80,000', change: 'October 2026', icon: CreditCard, color: 'indigo' },
+  ];
+
+  const recentAttendance = [
+    { id: '1', name: 'Sarah Johnson', empId: 'OI-SJ-2025-001', time: '09:05 AM', status: 'On Time', mode: 'Office' },
+    { id: '2', name: 'Rahul Verma', empId: 'OI-RV-2025-004', time: '09:18 AM', status: 'Late', mode: 'Office' },
+    { id: '3', name: 'Anita Patel', empId: 'OI-AP-2025-012', time: '08:55 AM', status: 'On Time', mode: 'Remote' },
+    { id: '4', name: 'David Miller', empId: 'OI-DM-2025-008', time: '09:02 AM', status: 'On Time', mode: 'Office' },
+  ];
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-8 animate-in fade-in duration-300">
+        {/* Header Greeting */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <div>
+            <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
+              Admin & HR Overview
+            </span>
+            <h1 className="text-2xl font-extrabold text-gray-900 mt-2">Organization Overview</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Manage employees, review attendance logs, and process workforce leave requests.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              to="/create-employee"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98]"
+            >
+              <UserPlus size={16} /> Add New Employee
+            </Link>
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {stats.map((stat, i) => {
+            const Icon = stat.icon;
+            return (
+              <div key={i} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{stat.title}</span>
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <Icon size={20} />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+                  <p className="text-xs font-medium text-emerald-600 mt-1 flex items-center gap-1">
+                    <TrendingUp size={12} /> {stat.change}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 2-Column Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Pending Leave Approvals Widget (2 cols) */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                  <CalendarDays className="text-emerald-600" size={20} /> Pending Leave Approvals
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">Review and approve employee time-off requests</p>
+              </div>
+              <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full border border-amber-200">
+                {leaveRequests.length} Pending
+              </span>
+            </div>
+
+            {leaveRequests.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <CheckCircle2 size={40} className="text-emerald-500 mb-2" />
+                <p className="font-bold text-gray-800">All caught up!</p>
+                <p className="text-xs text-gray-500">There are no pending leave requests to review.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 flex-1">
+                {leaveRequests.map((req) => (
+                  <div key={req.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-emerald-200 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                        {req.avatar}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm text-gray-900">{req.name}</h4>
+                          <span className="text-[10px] font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
+                            {req.role}
+                          </span>
+                        </div>
+                        <p className="text-xs font-semibold text-emerald-700 mt-0.5">{req.type} • {req.duration}</p>
+                        <p className="text-xs text-gray-500 mt-1 italic">"{req.reason}"</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <button
+                        onClick={() => handleReject(req.id, req.name)}
+                        className="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <XCircle size={14} /> Reject
+                      </button>
+                      <button
+                        onClick={() => handleApprove(req.id, req.name)}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+                      >
+                        <CheckCircle2 size={14} /> Approve
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Real-time Attendance Stream (1 col) */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
+                <Clock className="text-emerald-600" size={18} /> Today's Check-Ins
+              </h3>
+              <Link to="/admin/attendance" className="text-xs font-bold text-emerald-600 hover:underline">
+                View All
+              </Link>
+            </div>
+
+            <div className="space-y-3 flex-1">
+              {recentAttendance.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                  <div>
+                    <p className="font-bold text-gray-900">{item.name}</p>
+                    <p className="text-[11px] text-gray-400 font-mono">{item.empId}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-gray-800 block">{item.time}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      item.status === 'On Time' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {item.status} ({item.mode})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Links Footer Bar */}
+        <div className="bg-gradient-to-r from-[#0f1923] to-[#1e2a38] text-white p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <h4 className="font-extrabold text-lg text-white">Manage Workforce Operations</h4>
+            <p className="text-xs text-gray-400 mt-0.5">Quickly access employee directory, payroll calculations & system logs.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link to="/admin/employees" className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors">
+              Employee Directory
+            </Link>
+            <Link to="/admin/payroll" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors">
+              Process Payroll
+            </Link>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
