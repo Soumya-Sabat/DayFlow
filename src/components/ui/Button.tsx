@@ -1,6 +1,6 @@
-import { forwardRef, type ButtonHTMLAttributes, type Ref } from 'react';
-import { cn } from '@/utils/cn';
-import { useReducedMotion } from '@/hooks/useAnimation';
+import { forwardRef, type ButtonHTMLAttributes, type Ref } from "react";
+import { cn } from "@utils/cn";
+import { useReducedMotion } from "@hooks/useAnimation";
 
 interface LoadingButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
@@ -109,6 +109,3 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = 'Button';
-
-
-

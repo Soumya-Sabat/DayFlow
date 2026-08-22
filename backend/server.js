@@ -10,9 +10,9 @@ import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leaveRoutes from "./routes/leaveRoutes.js";
 import payrollRoutes from "./routes/payrollRoutes.js";
-import messageRoutes from "./routes/messageRoutes.js";
 
 import { sql } from "./config/db.js";
+//import { aj } from "./lib/arcjet.js";
 
 dotenv.config();
 
@@ -28,50 +28,37 @@ app.use(
   })
 );
 app.use(morgan("dev"));
-app.use("/api", (_req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  next();
-});
-app.get("/api/health", async (_req, res, next) => {
+
+// Apply Arcjet rate-limiting / security to all routes
+app.use(async (req, res, next) => {
+  if (!process.env.ARCJET_KEY) {
+    return next();
+  }
   try {
-    await sql`SELECT 1`;
-    res.json({ status: "ok" });
+    const decision = await aj.protect(req, { requested: 1 });
+
+    if (decision.isDenied()) {
+      if (decision.reason.isRateLimit()) {
+        res.status(429).json({ error: "Too Many Requests" });
+      } else if (decision.reason.isBot()) {
+        res.status(403).json({ error: "Bot access denied" });
+      } else {
+        res.status(403).json({ error: "Forbidden" });
+      }
+      return;
+    }
+
+    if (decision.results.some((result) => result.reason.isBot() && result.reason.isSpoofed())) {
+      res.status(403).json({ error: "Spoofed bot detected" });
+      return;
+    }
+
+    next();
   } catch (error) {
+    console.log("Arcjet error", error);
     next(error);
   }
 });
-
-// Arcjet disabled for development
-// import { aj } from "./lib/arcjet.js";
-// app.use(async (req, res, next) => {
-//   if (!process.env.ARCJET_KEY) {
-//     return next();
-//   }
-//   try {
-//     const decision = await aj.protect(req, { requested: 1 });
-//
-//     if (decision.isDenied()) {
-//       if (decision.reason.isRateLimit()) {
-//         res.status(429).json({ error: "Too Many Requests" });
-//       } else if (decision.reason.isBot()) {
-//         res.status(403).json({ error: "Bot access denied" });
-//       } else {
-//         res.status(403).json({ error: "Forbidden" });
-//       }
-//       return;
-//     }
-//
-//     if (decision.results.some((result) => result.reason.isBot() && result.reason.isSpoofed())) {
-//       res.status(403).json({ error: "Spoofed bot detected" });
-//       return;
-//     }
-//
-//     next();
-//   } catch (error) {
-//     console.log("Arcjet error", error);
-//     next(error);
-//   }
-// });
 
 // API Endpoints
 app.use("/api/auth", authRoutes);
@@ -79,7 +66,6 @@ app.use("/api/employees", employeeRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/payroll", payrollRoutes);
-app.use("/api/messages", messageRoutes);
 
 // Initialize HRMS Database Tables & Seed Sample Data
 async function initDB() {
@@ -109,24 +95,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
-    // Upgrade databases created by earlier versions. CREATE TABLE IF NOT EXISTS does
-    // not add fields to an existing table, so every runtime field is migrated here.
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(50) UNIQUE;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'Employee';`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture VARCHAR(255);`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS wage_type VARCHAR(50) DEFAULT 'Fixed';`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_wage DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS yearly_wage DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS basic_pay DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS hra DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS standard_allowance DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS performance_bonus DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS pf_deduction DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS pt_deduction DECIMAL(10, 2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
 
     // 2. Attendance Table
     await sql`
@@ -157,14 +125,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
-    // Upgrade legacy leave tables created before all request metadata existed.
-    await sql`ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS allocation_days DECIMAL(5, 2) NOT NULL DEFAULT 1.0;`;
-    await sql`ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS attachment VARCHAR(255);`;
-    await sql`ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS remarks TEXT;`;
-    await sql`ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending';`;
-    await sql`ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS admin_comments TEXT;`;
-    await sql`ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
-    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(100);`;
 
     // 4. Payslips Table
     await sql`
@@ -183,26 +143,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id SERIAL PRIMARY KEY,
-        user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        token VARCHAR(128) UNIQUE NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS messages (
-        id SERIAL PRIMARY KEY,
-        sender_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        recipient_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        body TEXT NOT NULL,
-        read_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CHECK (sender_id <> recipient_id)
-      );
-    `;
 
     console.log("Database tables initialized successfully");
   } catch (error) {
@@ -215,10 +155,4 @@ initDB().then(() => {
   app.listen(PORT, () => {
     console.log("Dayflow HRMS Server is running on port " + PORT);
   });
-});
-
-app.use((error, _req, res, next) => {
-  void next;
-  console.error("Unhandled API error:", error);
-  res.status(500).json({ error: "The server could not complete this request." });
 });
