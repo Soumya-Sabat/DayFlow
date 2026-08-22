@@ -7,7 +7,7 @@ export const aj = arcjet({
   key: process.env.ARCJET_KEY,
   characteristics: ["ip.src"],
   rules: [
-    // shield protects your app from common attacks e.g. SQL injection, XSS, CSRF attacks
+    // shield protects our app from common attacks e.g. SQL injection, XSS, CSRF attacks
     shield({ mode: "LIVE" }),
     detectBot({
       mode: "LIVE",
@@ -17,7 +17,7 @@ export const aj = arcjet({
         // see the full list at https://arcjet.com/bot-list
       ],
     }),
-    // rate limiting
+    // rate limiting here
     tokenBucket({
       mode: "LIVE",
       refillRate: 30,
