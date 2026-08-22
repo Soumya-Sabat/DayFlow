@@ -16,4 +16,16 @@ export default defineConfig({
       '@types': path.resolve(__dirname, './src/types'),
     },
   },
+<<<<<<< HEAD
+=======
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
 })

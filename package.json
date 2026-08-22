@@ -9,15 +9,22 @@
     "lint": "eslint .",
     "preview": "vite preview",
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    "typecheck": "tsc --noEmit",
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
     "back": "nodemon backend/server.js"
   },
   "dependencies": {
     "@arcjet/node": "^1.0.0-alpha.38",
+    "@headlessui/react": "^2.2.10",
     "@neondatabase/serverless": "^0.10.4",
+    "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
+    "lucide-react": "^1.33.0",
     "morgan": "^1.10.0",
 =======
     "typecheck": "tsc --noEmit"
@@ -47,13 +54,19 @@
     "globals": "^17.7.0",
 <<<<<<< HEAD
     "nodemon": "^3.1.14",
+<<<<<<< HEAD
     "vite": "^8.2.0"
 =======
+=======
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "vite-plugin-eslint": "^1.8.1"
+<<<<<<< HEAD
 >>>>>>> 5031375a9004de1ecb3f98ddbac59981de3208c4
+=======
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
   }
 }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState } from 'react';
 import { Clock, Calendar, Search, Filter, Download, CheckCircle, AlertCircle } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
@@ -8,6 +9,73 @@ export function AttendancePage() {
   const [filterDate, setFilterDate] = useState('2026-10-24');
 
   const attendanceLogs = [
+=======
+import React, { useState, useEffect } from 'react';
+import { Clock, Calendar, Search, Filter, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
+import { useToast } from '@/context/ToastContext';
+import { useAuth } from '@/context/AuthContext';
+import { attendanceService, AttendanceRecord } from '@/services/attendance.service';
+
+export function AttendancePage() {
+  const { addToast } = useToast();
+  const { user } = useAuth();
+  const [logs, setLogs] = useState<AttendanceRecord[]>([]);
+  const [daysPresent, setDaysPresent] = useState<number>(18);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const userId = user?.id || '1';
+    const role = user?.role || 'employee';
+
+    if (role === 'admin' || role === 'hr') {
+      attendanceService
+        .getAdminAttendance()
+        .then((res) => {
+          if (res?.records) {
+            setLogs(
+              res.records.map((r) => ({
+                id: r.id,
+                date: r.date,
+                in: r.check_in || '--',
+                out: r.check_out || '--',
+                duration: r.work_hours || '--',
+                status: r.status || 'Present',
+                mode: r.employee_name || 'Office',
+              }))
+            );
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } else {
+      attendanceService
+        .getMyAttendance(userId)
+        .then((res) => {
+          if (res?.logs && res.logs.length > 0) {
+            setLogs(
+              res.logs.map((r) => ({
+                id: r.id,
+                date: r.date,
+                in: r.check_in || '--',
+                out: r.check_out || '--',
+                duration: r.work_hours || '8h 30m',
+                status: r.status || 'Present',
+                mode: 'Office',
+              }))
+            );
+          }
+          if (res?.summary?.count_days_present !== undefined) {
+            setDaysPresent(Number(res.summary.count_days_present));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [user]);
+
+  const displayLogs = logs.length > 0 ? logs : [
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
     { id: '1', date: 'Oct 24, 2026', in: '09:05 AM', out: '06:00 PM', duration: '8h 55m', status: 'Present', mode: 'Office' },
     { id: '2', date: 'Oct 23, 2026', in: '09:12 AM', out: '06:05 PM', duration: '8h 53m', status: 'Present', mode: 'Office' },
     { id: '3', date: 'Oct 22, 2026', in: '09:00 AM', out: '06:00 PM', duration: '9h 00m', status: 'Present', mode: 'Remote' },
@@ -39,7 +107,11 @@ export function AttendancePage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Days Present (This Month)</span>
+<<<<<<< HEAD
             <p className="text-3xl font-black text-emerald-600 mt-2">18 Days</p>
+=======
+            <p className="text-3xl font-black text-emerald-600 mt-2">{daysPresent} Days</p>
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
           </div>
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Avg Working Hours</span>
@@ -60,11 +132,16 @@ export function AttendancePage() {
                 <th className="px-6 py-4">Check In</th>
                 <th className="px-6 py-4">Check Out</th>
                 <th className="px-6 py-4">Total Hours</th>
+<<<<<<< HEAD
                 <th className="px-6 py-4">Location Mode</th>
+=======
+                <th className="px-6 py-4">Employee / Mode</th>
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
                 <th className="px-6 py-4">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
+<<<<<<< HEAD
               {attendanceLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-gray-50/80">
                   <td className="px-6 py-4 font-bold text-gray-900">{log.date}</td>
@@ -72,11 +149,24 @@ export function AttendancePage() {
                   <td className="px-6 py-4 text-gray-600">{log.out}</td>
                   <td className="px-6 py-4 font-mono text-xs">{log.duration}</td>
                   <td className="px-6 py-4 text-xs font-semibold">{log.mode}</td>
+=======
+              {displayLogs.map((log, i) => (
+                <tr key={log.id || i} className="hover:bg-gray-50/80">
+                  <td className="px-6 py-4 font-bold text-gray-900">{log.date}</td>
+                  <td className="px-6 py-4 text-emerald-700 font-semibold">{log.in || log.check_in || '--'}</td>
+                  <td className="px-6 py-4 text-gray-600">{log.out || log.check_out || '--'}</td>
+                  <td className="px-6 py-4 font-mono text-xs">{log.duration || log.work_hours || '--'}</td>
+                  <td className="px-6 py-4 text-xs font-semibold">{log.mode || log.employee_name || 'Office'}</td>
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                       log.status === 'Present' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                     }`}>
+<<<<<<< HEAD
                       {log.status}
+=======
+                      {log.status || 'Present'}
+>>>>>>> 316679f4f8507c6495f3ccdcb55d61ce74f063e7
                     </span>
                   </td>
                 </tr>
