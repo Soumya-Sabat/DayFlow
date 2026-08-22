@@ -14,7 +14,6 @@ import {
   Menu,
   X,
   UserPlus,
-  ShieldCheck,
   Building,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -110,27 +109,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           >
             <X size={20} />
           </button>
-        </div>
-
-        {/* Role Toggle Banner */}
-        <div className="px-4 py-3 bg-white/5 border-b border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs">
-            {isAdmin ? (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
-                <ShieldCheck size={12} /> Admin Portal
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/30 flex items-center gap-1">
-                <User size={12} /> Employee Portal
-              </span>
-            )}
-          </div>
-          <Link
-            to={isAdmin ? '/dashboard' : '/admin/dashboard'}
-            className="text-[11px] text-gray-400 hover:text-white underline"
-          >
-            Switch to {isAdmin ? 'Employee' : 'Admin'}
-          </Link>
         </div>
 
         {/* Navigation Items */}
