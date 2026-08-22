@@ -49,6 +49,19 @@ Draft — functional scope defined, several implementation-critical decisions (l
 
 ---
 
+## Environment variables
+```
+
+
+PORT= 
+PGUSER=
+PGPASSWORD=
+PGHOST=
+PGDATABASE=
+ARCJET_ENV=
+ARCJET_KEY=
+```
+
 ## Design
 
 Wireframes: https://link.excalidraw.com/l/65VNwvy7c4X/58RLEJ4oOwh
