@@ -12,21 +12,21 @@ function generateEmployeeId(companyCode, firstName, lastName, joinYear, serialNu
   return `${initialCode}${nameCode}${joinYear}${formattedSerial}`;
 }
 
+// POST /api/employees - HR creates a new employee
 router.post("/", async (req, res) => {
   const { firstName, lastName, email, phone, role, companyCode, salary } = req.body;
   const currentYear = new Date().getFullYear();
 
   try {
-    // Determine serial number for auto-generated ID
     const countResult = await sql`SELECT COUNT(*) FROM users WHERE EXTRACT(YEAR FROM created_at) = ${currentYear};`;
     const serialNum = parseInt(countResult[0].count, 10) + 1;
 
     const autoEmpId = generateEmployeeId(companyCode || "OI", firstName, lastName, currentYear, serialNum);
-    const tempPassword = Math.random().toString(36).slice(-8); // Generate temp password
+    const tempPassword = Math.random().toString(36).slice(-8);
 
     const newEmp = await sql`
-      INSERT INTO users (employee_id, name, email, phone, password, role, salary)
-      VALUES (${autoEmpId}, ${firstName + " " + lastName}, ${email}, ${phone}, ${tempPassword}, ${role || 'Employee'}, ${salary})
+      INSERT INTO users (employee_id, name, email, phone, password, role, monthly_wage)
+      VALUES (${autoEmpId}, ${firstName + " " + lastName}, ${email}, ${phone}, ${tempPassword}, ${role || 'Employee'}, ${salary || 0.00})
       RETURNING id, employee_id, name, email, role;
     `;
 
@@ -41,11 +41,11 @@ router.post("/", async (req, res) => {
   }
 });
 
-// GET /api/employees - Fetch all employees (Admin/HR View)
+// GET /api/employees - Fetch all employees
 router.get("/", async (req, res) => {
   try {
     const employees = await sql`
-      SELECT id, employee_id, name, email, phone, role, address, profile_picture, salary 
+      SELECT id, employee_id, name, email, phone, role, address, profile_picture 
       FROM users;
     `;
     res.status(200).json(employees);
@@ -58,7 +58,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const employee = await sql`
-      SELECT id, employee_id, name, email, phone, role, address, profile_picture, salary 
+      SELECT id, employee_id, name, email, phone, role, address, profile_picture 
       FROM users WHERE id = ${req.params.id};
     `;
 
@@ -70,37 +70,25 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// PUT /api/employees/:id - Update employee profile
-router.put("/:id", async (req, res) => {
-  const { address, phone, profilePicture, salary, isHR } = req.body;
+// GET /api/employees/:id/salary - (Admin/HR Only)
+router.get("/:id/salary", async (req, res) => {
+  const { requesterrole } = req.headers;
+
+  if (requesterrole !== "Admin" && requesterrole !== "HR") {
+    return res.status(403).json({ error: "Access Denied: Salary Info is only visible to Admin/HR" });
+  }
 
   try {
-    // If regular user (non-HR), allow updating address, phone, and profile picture
-    if (!isHR) {
-      const updated = await sql`
-        UPDATE users 
-        SET address = COALESCE(${address}, address),
-            phone = COALESCE(${phone}, phone),
-            profile_picture = COALESCE(${profilePicture}, profile_picture)
-        WHERE id = ${req.params.id}
-        RETURNING id, name, address, phone, profile_picture;
-      `;
-      return res.status(200).json(updated[0]);
-    }
-
-    // HR can update all fields including salary
-    const updated = await sql`
-      UPDATE users 
-      SET address = COALESCE(${address}, address),
-          phone = COALESCE(${phone}, phone),
-          profile_picture = COALESCE(${profilePicture}, profile_picture),
-          salary = COALESCE(${salary}, salary)
-      WHERE id = ${req.params.id}
-      RETURNING id, name, address, phone, salary;
+    const userSalary = await sql`
+      SELECT id, name, wage_type, monthly_wage, yearly_wage, basic_pay, hra, standard_allowance, performance_bonus, pf_deduction, pt_deduction
+      FROM users WHERE id = ${req.params.id};
     `;
-    res.status(200).json(updated[0]);
+
+    if (userSalary.length === 0) return res.status(404).json({ error: "Employee not found" });
+
+    res.status(200).json(userSalary[0]);
   } catch (error) {
-    res.status(500).json({ error: "Failed to update profile" });
+    res.status(500).json({ error: error.message });
   }
 });
 
