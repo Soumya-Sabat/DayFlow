@@ -161,14 +161,6 @@ export function CreateEmployeeForm() {
           {errors.joiningDate && <p className="auth-field-error" role="alert">{errors.joiningDate}</p>}
         </div>
 
-        {/* Login ID preview */}
-        {loginIdPreview && (
-          <div className="cef-preview-box">
-            <p className="cef-preview-label">Login ID Preview</p>
-            <code className="cef-preview-code">{loginIdPreview}</code>
-            <p className="cef-preview-hint">Final ID is assigned by the backend on creation</p>
-          </div>
-        )}
 
         {/* Info note */}
         <div className="cef-info-box">

@@ -14,6 +14,7 @@ interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
   rightIcon?: React.ReactNode;
 }
 
+
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   ({ label, error, hint, showStrength = false, strength, className, leftIcon, rightIcon, ...props }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
