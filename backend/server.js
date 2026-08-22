@@ -78,20 +78,31 @@ app.use("/api/leaves", leaveRoutes);
 // Initialize HRMS Database Tables
 async function initDB() {
   try {
-    // 1. Employee / User Table
+    // 1. Users / Employees Table
     await sql`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        employee_id VARCHAR(50) UNIQUE,
+        employee_id VARCHAR(50) UNIQUE,              -- Auto-generated format: e.g., OIJODO20260001
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         phone VARCHAR(50),
-        password VARCHAR(255) NOT NULL,
-        role VARCHAR(50) DEFAULT 'Employee',
+        password VARCHAR(255) NOT NULL,              -- System auto-generates or user-defined
+        role VARCHAR(50) DEFAULT 'Employee',         -- 'Admin' or 'Employee'
         company_name VARCHAR(255),
         address TEXT,
         profile_picture VARCHAR(255),
-        salary DECIMAL(10, 2) DEFAULT 0.00,
+        
+        -- Salary & Wage Components (Admin/HR access only)
+        wage_type VARCHAR(50) DEFAULT 'Fixed',       
+        monthly_wage DECIMAL(10, 2) DEFAULT 0.00,    
+        yearly_wage DECIMAL(10, 2) DEFAULT 0.00,     
+        basic_pay DECIMAL(10, 2) DEFAULT 0.00,       
+        hra DECIMAL(10, 2) DEFAULT 0.00,             
+        standard_allowance DECIMAL(10, 2) DEFAULT 0.00, 
+        performance_bonus DECIMAL(10, 2) DEFAULT 0.00,
+        pf_deduction DECIMAL(10, 2) DEFAULT 0.00,    
+        pt_deduction DECIMAL(10, 2) DEFAULT 0.00,    
+        
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -101,24 +112,24 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS attendance (
         id SERIAL PRIMARY KEY,
         user_id INT REFERENCES users(id) ON DELETE CASCADE,
-        check_in TIMESTAMP,
-        check_out TIMESTAMP,
-        date DATE NOT NULL,
-        status VARCHAR(50) DEFAULT 'Present',
+        check_in TIMESTAMP,                          -- Logged upon Check In
+        check_out TIMESTAMP,                         -- Logged upon Check Out
+        date DATE NOT NULL DEFAULT CURRENT_DATE,
+        status VARCHAR(50) DEFAULT 'Present',        -- 'Present', 'Absent', 'Half-day', 'Leave'
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
 
-    // 3. Leave Requests Table
+    // 3. Leave & Time-Off Requests Table
     await sql`
       CREATE TABLE IF NOT EXISTS leave_requests (
         id SERIAL PRIMARY KEY,
         user_id INT REFERENCES users(id) ON DELETE CASCADE,
-        leave_type VARCHAR(50) NOT NULL,
+        leave_type VARCHAR(50) NOT NULL,            -- 'Paid', 'Sick', 'Unpaid'
         start_date DATE NOT NULL,
         end_date DATE NOT NULL,
         remarks TEXT,
-        status VARCHAR(50) DEFAULT 'Pending',
+        status VARCHAR(50) DEFAULT 'Pending',        -- 'Pending', 'Approved', 'Rejected'
         admin_comments TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -126,7 +137,7 @@ async function initDB() {
 
     console.log("Database initialized successfully");
   } catch (error) {
-    console.log("Error initializing DB:", error);
+    console.error("Error initializing DB:", error);
   }
 }
 
