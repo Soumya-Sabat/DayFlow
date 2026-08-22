@@ -31,6 +31,9 @@ app.use(morgan("dev")); // Logging middleware
 
 // Apply Arcjet rate-limiting / security to all routes
 app.use(async (req, res, next) => {
+  if (!process.env.ARCJET_KEY) {
+    return next();
+  }
   try {
     const decision = await aj.protect(req, {
       requested: 1, // Consumes 1 token per request
