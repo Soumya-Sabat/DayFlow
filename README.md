@@ -48,6 +48,14 @@ Dayflow exists to collapse this into one role-aware system: employees self-serve
 Draft — functional scope defined, several implementation-critical decisions (leave accrual rules, notification triggers, check-in/out mechanism) are still open. See the full PRD for details and open questions before starting development.
 
 ---
+## Quality Assurance
+
+The system has been tested for:
+- Authentication & Role-Based Access
+- Attendance Management
+- Leave Request & Approval Workflows
+- Payroll Access Control
+- Dashboard Navigation & User Flows
 
 ## Design
 
