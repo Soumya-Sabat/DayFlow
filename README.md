@@ -1,16 +1,54 @@
-# React + Vite
+# Dayflow
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Every workday, perfectly aligned.**
 
-Currently, two official plugins are available:
+Dayflow is a Human Resource Management System (HRMS) built to replace fragmented, manual HR operations — spreadsheets, email approvals, disconnected payroll views — with one system employees and HR can actually trust.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Problem Statement
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Most small-to-mid-size organizations run HR on tools that were never built for it. Leave requests get buried in email threads. Attendance gets reconciled by hand at the end of the month. Employees have no visibility into their own payroll data and have to ask HR directly for basic answers. HR officers, meanwhile, juggle spreadsheets, approval chains, and employee records across systems that don't talk to each other.
 
-## Expanding the ESLint configuration
+The result:
+- **Slow, inconsistent leave approvals** — no single queue, no SLA, no audit trail
+- **Manual attendance reconciliation** — error-prone, time-consuming, disputed after the fact
+- **Zero payroll transparency for employees** — every question becomes an HR ticket
+- **No single source of truth** — employee data scattered across spreadsheets, emails, and disconnected tools
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Dayflow exists to collapse this into one role-aware system: employees self-serve on attendance, leave, and profile; HR gets a single dashboard to manage and approve; payroll becomes visible instead of opaque.
+
+> **Note:** the pain points above are framed for pitch purposes, not backed by org-specific research. Replace with real numbers/quotes if you have them before using this externally.
+
+---
+
+## Who It's For
+
+| Role | What they need |
+|---|---|
+| **Admin / HR Officer** | One dashboard to manage employees, approve leave/attendance, and control payroll — without switching tools |
+| **Employee** | Self-service access to their own profile, attendance, leave requests, and salary details |
+
+---
+
+## Core Features
+
+- 🔐 **Secure authentication** — Sign up/sign in with email verification and role-based access
+- 🧑‍💼 **Role-based dashboards** — separate views for Employee and Admin/HR
+- 📇 **Employee profile management** — view and edit personal, job, and salary details
+- 🕒 **Attendance tracking** — daily/weekly views, check-in/check-out, status tracking (Present/Absent/Half-day/Leave)
+- 🗓️ **Leave & time-off management** — apply, track status, and approve/reject with comments
+- 💰 **Payroll visibility** — read-only for employees, full control for Admin
+- 📊 **Analytics & reports** — salary slips, attendance reports, notifications
+
+---
+
+## Status
+
+Draft — functional scope defined, several implementation-critical decisions (leave accrual rules, notification triggers, check-in/out mechanism) are still open. See the full PRD for details and open questions before starting development.
+
+---
+
+## Design
+
+Wireframes: https://link.excalidraw.com/l/65VNwvy7c4X/58RLEJ4oOwh
