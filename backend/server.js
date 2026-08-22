@@ -3,38 +3,39 @@ import helmet from "helmet";
 import morgan from "morgan";
 import cors from "cors";
 import dotenv from "dotenv";
-import path from "path";
 
 // Import HRMS API Routes
 import authRoutes from "./routes/authRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leaveRoutes from "./routes/leaveRoutes.js";
+import payrollRoutes from "./routes/payrollRoutes.js";
 
 import { sql } from "./config/db.js";
-import { aj } from "./lib/arcjet.js";
+//import { aj } from "./lib/arcjet.js";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-// const __dirname = path.resolve();
 
+app.set("trust proxy", true);
 app.use(express.json());
 app.use(cors());
 app.use(
   helmet({
     contentSecurityPolicy: false,
   })
-); // Security middleware
-app.use(morgan("dev")); // Logging middleware
+);
+app.use(morgan("dev"));
 
 // Apply Arcjet rate-limiting / security to all routes
 app.use(async (req, res, next) => {
+  if (!process.env.ARCJET_KEY) {
+    return next();
+  }
   try {
-    const decision = await aj.protect(req, {
-      requested: 1, // Consumes 1 token per request
-    });
+    const decision = await aj.protect(req, { requested: 1 });
 
     if (decision.isDenied()) {
       if (decision.reason.isRateLimit()) {
@@ -47,7 +48,6 @@ app.use(async (req, res, next) => {
       return;
     }
 
-    // Check for spoofed bots
     if (decision.results.some((result) => result.reason.isBot() && result.reason.isSpoofed())) {
       res.status(403).json({ error: "Spoofed bot detected" });
       return;
@@ -65,34 +65,24 @@ app.use("/api/auth", authRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leaves", leaveRoutes);
+app.use("/api/payroll", payrollRoutes);
 
-// Serve static assets in production
-// if (process.env.NODE_ENV === "production") {
-//   app.use(express.static(path.join(__dirname, "/frontend/dist")));
-
-//   app.get("*", (req, res) => {
-//     res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
-//   });
-// }
-
-// Initialize HRMS Database Tables
+// Initialize HRMS Database Tables & Seed Sample Data
 async function initDB() {
   try {
     // 1. Users / Employees Table
     await sql`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        employee_id VARCHAR(50) UNIQUE,              -- Auto-generated format: e.g., OIJODO20260001
+        employee_id VARCHAR(50) UNIQUE,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         phone VARCHAR(50),
-        password VARCHAR(255) NOT NULL,              -- System auto-generates or user-defined
-        role VARCHAR(50) DEFAULT 'Employee',         -- 'Admin' or 'Employee'
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'Employee',
         company_name VARCHAR(255),
         address TEXT,
         profile_picture VARCHAR(255),
-        
-        -- Salary & Wage Components (Admin/HR access only)
         wage_type VARCHAR(50) DEFAULT 'Fixed',       
         monthly_wage DECIMAL(10, 2) DEFAULT 0.00,    
         yearly_wage DECIMAL(10, 2) DEFAULT 0.00,     
@@ -102,7 +92,6 @@ async function initDB() {
         performance_bonus DECIMAL(10, 2) DEFAULT 0.00,
         pf_deduction DECIMAL(10, 2) DEFAULT 0.00,    
         pt_deduction DECIMAL(10, 2) DEFAULT 0.00,    
-        
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -112,40 +101,58 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS attendance (
         id SERIAL PRIMARY KEY,
         user_id INT REFERENCES users(id) ON DELETE CASCADE,
-        check_in TIMESTAMP,                          -- Logged upon Check In
-        check_out TIMESTAMP,                         -- Logged upon Check Out
+        check_in TIMESTAMP,
+        check_out TIMESTAMP,
         date DATE NOT NULL DEFAULT CURRENT_DATE,
-        status VARCHAR(50) DEFAULT 'Present',        -- 'Present', 'Absent', 'Half-day', 'Leave'
+        status VARCHAR(50) DEFAULT 'Present',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
 
     // 3. Leave & Time-Off Requests Table
     await sql`
-  CREATE TABLE IF NOT EXISTS leave_requests (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id) ON DELETE CASCADE,
-    leave_type VARCHAR(50) NOT NULL,            -- 'Paid Time Off', 'Sick Leave', 'Unpaid Leaves'
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    allocation_days DECIMAL(5, 2) NOT NULL,      -- Calculated number of days (e.g. 1.0, 2.5)
-    attachment VARCHAR(255),                    -- URL / File path for sick leave certificates
-    remarks TEXT,
-    status VARCHAR(50) DEFAULT 'Pending',        -- 'Pending', 'Approved', 'Rejected'
-    admin_comments TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
-`;
+      CREATE TABLE IF NOT EXISTS leave_requests (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        leave_type VARCHAR(50) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        allocation_days DECIMAL(5, 2) NOT NULL,
+        attachment VARCHAR(255),
+        remarks TEXT,
+        status VARCHAR(50) DEFAULT 'Pending',
+        admin_comments TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
 
-    console.log("Database initialized successfully");
+    // 4. Payslips Table
+    await sql`
+      CREATE TABLE IF NOT EXISTS payslips (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        month_year VARCHAR(50) NOT NULL,
+        basic_pay DECIMAL(10, 2) DEFAULT 0.00,
+        hra DECIMAL(10, 2) DEFAULT 0.00,
+        performance_bonus DECIMAL(10, 2) DEFAULT 0.00,
+        pf_deduction DECIMAL(10, 2) DEFAULT 0.00,
+        pt_deduction DECIMAL(10, 2) DEFAULT 0.00,
+        net_pay DECIMAL(10, 2) DEFAULT 0.00,
+        status VARCHAR(50) DEFAULT 'Paid',
+        payment_date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    console.log("Database tables initialized successfully");
   } catch (error) {
-    console.error("Error initializing DB:", error);
+    console.warn("DB initialization notice:", error.message);
   }
 }
 
 // Start Server after Database Setup
 initDB().then(() => {
   app.listen(PORT, () => {
-    console.log("Server is running on port " + PORT);
+    console.log("Dayflow HRMS Server is running on port " + PORT);
   });
 });

@@ -1,95 +1,80 @@
 import express from "express";
 import { sql } from "../config/db.js";
+import { requireAuth, requireRoles, ownsUserOrIsAdmin } from "../lib/auth.js";
+import { createTemporaryPassword, hashPassword } from "../lib/security.js";
 
 const router = express.Router();
+router.use(requireAuth);
 
-// Helper function to generate Employee ID
-// Format: [Company Initials][First 2 letters of First & Last Name][Year][Serial No.]
-function generateEmployeeId(companyCode, firstName, lastName, joinYear, serialNum) {
-  const initialCode = (companyCode.slice(0, 2)).toUpperCase();
-  const nameCode = (firstName.slice(0, 2) + lastName.slice(0, 2)).toUpperCase();
-  const formattedSerial = String(serialNum).padStart(4, "0");
-  return `${initialCode}${nameCode}${joinYear}${formattedSerial}`;
-}
+const employeeId = (companyCode, firstName, lastName, year, serial) =>
+  `${(companyCode || "DF").replace(/[^a-z]/gi, "").slice(0, 4).toUpperCase()}${(firstName || "E").slice(0, 2)}${(lastName || "U").slice(0, 2)}${year}${String(serial).padStart(4, "0")}`.toUpperCase();
 
-// POST /api/employees - HR creates a new employee
-router.post("/", async (req, res) => {
-  const { firstName, lastName, email, phone, role, companyCode, salary } = req.body;
-  const currentYear = new Date().getFullYear();
-
+router.post("/", requireRoles("Admin"), async (req, res, next) => {
+  const { firstName, lastName, email, phone, companyCode, companyName, joiningDate, department, salary = 0 } = req.body;
+  if (![firstName, email].every((value) => typeof value === "string" && value.trim())) return res.status(400).json({ error: "Employee name and email are required." });
   try {
-    const countResult = await sql`SELECT COUNT(*) FROM users WHERE EXTRACT(YEAR FROM created_at) = ${currentYear};`;
-    const serialNum = parseInt(countResult[0].count, 10) + 1;
-
-    const autoEmpId = generateEmployeeId(companyCode || "OI", firstName, lastName, currentYear, serialNum);
-    const tempPassword = Math.random().toString(36).slice(-8);
-
-    const newEmp = await sql`
-      INSERT INTO users (employee_id, name, email, phone, password, role, monthly_wage)
-      VALUES (${autoEmpId}, ${firstName + " " + lastName}, ${email}, ${phone}, ${tempPassword}, ${role || 'Employee'}, ${salary || 0.00})
-      RETURNING id, employee_id, name, email, role;
+    const count = await sql`SELECT COUNT(*)::int AS count FROM users;`;
+    const id = employeeId(companyCode, firstName, lastName, new Date(joiningDate || Date.now()).getFullYear(), Number(count[0].count) + 1);
+    const temporaryPassword = createTemporaryPassword();
+    const employees = await sql`
+      INSERT INTO users (employee_id, name, email, phone, password, role, company_name, department, monthly_wage, yearly_wage)
+      VALUES (${id}, ${(String(firstName).trim() + " " + String(lastName || "").trim()).trim()}, ${email.trim().toLowerCase()}, ${phone?.trim() || null}, ${hashPassword(temporaryPassword)}, 'Employee', ${companyName?.trim() || req.user.company_name || null}, ${department?.trim() || null}, ${Number(salary) || 0}, ${(Number(salary) || 0) * 12})
+      RETURNING id, employee_id, name, email, phone, role, company_name, department;
     `;
-
-    res.status(201).json({
-      message: "Employee created successfully",
-      employee: newEmp[0],
-      tempPassword,
-    });
+    res.status(201).json({ message: "Employee created successfully", employee: employees[0], tempPassword: temporaryPassword });
   } catch (error) {
-    console.error("Employee creation error:", error);
-    res.status(500).json({ error: "Failed to create employee" });
+    if (error.code === "23505") return res.status(409).json({ error: "An employee already exists with that email." });
+    next(error);
   }
 });
 
-// GET /api/employees - Fetch all employees
-router.get("/", async (req, res) => {
+router.get("/", requireRoles("Admin", "HR"), async (_req, res, next) => {
+  try { res.json(await sql`SELECT id, employee_id, name, email, phone, role, company_name, address, profile_picture, department FROM users ORDER BY name;`); } catch (error) { next(error); }
+});
+
+router.get("/:id", async (req, res, next) => {
+  if (!ownsUserOrIsAdmin(req, req.params.id)) return res.status(403).json({ error: "You can only view your own profile." });
+  try {
+    const employees = await sql`SELECT id, employee_id, name, email, phone, role, company_name, address, profile_picture, department FROM users WHERE id = ${req.params.id};`;
+    if (!employees[0]) return res.status(404).json({ error: "Employee not found." });
+    res.json(employees[0]);
+  } catch (error) { next(error); }
+});
+
+router.put("/:id", async (req, res, next) => {
+  if (!ownsUserOrIsAdmin(req, req.params.id)) return res.status(403).json({ error: "You can only update your own profile." });
+  const { name, email, phone, address, department } = req.body;
+  if (!name || !email) return res.status(400).json({ error: "Name and email are required." });
   try {
     const employees = await sql`
-      SELECT id, employee_id, name, email, phone, role, address, profile_picture 
-      FROM users;
+      UPDATE users SET name = ${String(name).trim()}, email = ${String(email).trim().toLowerCase()}, phone = ${phone?.trim() || null}, address = ${address?.trim() || null}, department = ${department?.trim() || null}
+      WHERE id = ${req.params.id}
+      RETURNING id, employee_id, name, email, phone, role, company_name, address, profile_picture, department;
     `;
-    res.status(200).json(employees);
+    if (!employees[0]) return res.status(404).json({ error: "Employee not found." });
+    res.json({ message: "Profile updated successfully", employee: employees[0] });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch employees" });
+    if (error.code === "23505") return res.status(409).json({ error: "That email is already in use." });
+    next(error);
   }
 });
 
-// GET /api/employees/:id - Get employee profile details
-router.get("/:id", async (req, res) => {
+router.delete("/:id", requireRoles("Admin"), async (req, res, next) => {
+  if (String(req.user.id) === String(req.params.id)) return res.status(400).json({ error: "You cannot delete your own administrator account." });
   try {
-    const employee = await sql`
-      SELECT id, employee_id, name, email, phone, role, address, profile_picture 
-      FROM users WHERE id = ${req.params.id};
-    `;
-
-    if (employee.length === 0) return res.status(404).json({ error: "Employee not found" });
-
-    res.status(200).json(employee[0]);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch profile" });
-  }
+    const rows = await sql`DELETE FROM users WHERE id = ${req.params.id} RETURNING id, name;`;
+    if (!rows[0]) return res.status(404).json({ error: "Employee not found." });
+    res.json({ message: "Employee deleted successfully", employee: rows[0] });
+  } catch (error) { next(error); }
 });
 
-// GET /api/employees/:id/salary - (Admin/HR Only)
-router.get("/:id/salary", async (req, res) => {
-  const { requesterrole } = req.headers;
-
-  if (requesterrole !== "Admin" && requesterrole !== "HR") {
-    return res.status(403).json({ error: "Access Denied: Salary Info is only visible to Admin/HR" });
-  }
-
+router.get("/:id/salary", async (req, res, next) => {
+  if (!ownsUserOrIsAdmin(req, req.params.id)) return res.status(403).json({ error: "You can only view your own salary information." });
   try {
-    const userSalary = await sql`
-      SELECT id, name, wage_type, monthly_wage, yearly_wage, basic_pay, hra, standard_allowance, performance_bonus, pf_deduction, pt_deduction
-      FROM users WHERE id = ${req.params.id};
-    `;
-
-    if (userSalary.length === 0) return res.status(404).json({ error: "Employee not found" });
-
-    res.status(200).json(userSalary[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    const users = await sql`SELECT id, name, wage_type, monthly_wage, yearly_wage, basic_pay, hra, standard_allowance, performance_bonus, pf_deduction, pt_deduction FROM users WHERE id = ${req.params.id};`;
+    if (!users[0]) return res.status(404).json({ error: "Employee not found." });
+    res.json(users[0]);
+  } catch (error) { next(error); }
 });
 
 export default router;

@@ -1,16 +1,18 @@
-import arcjet, { tokenBucket, shield, detectBot, slidingWindow } from "@arcjet/node";
+import arcjet, { tokenBucket, shield, detectBot } from "@arcjet/node";
 
 import "dotenv/config";
+
+const isDevelopment = process.env.NODE_ENV === "development" || process.env.ARCJET_ENV === "development";
 
 // init arcjet
 export const aj = arcjet({
   key: process.env.ARCJET_KEY,
-  characteristics: ["ip.src"],
+  characteristics: isDevelopment ? [] : ["ip.src"],
   rules: [
     // shield protects your app from common attacks e.g. SQL injection, XSS, CSRF attacks
-    shield({ mode: "LIVE" }),
+    shield({ mode: isDevelopment ? "DRY_RUN" : "LIVE" }),
     detectBot({
-      mode: "LIVE",
+      mode: isDevelopment ? "DRY_RUN" : "LIVE",
       // block all bots except search engines
       allow: [
         "CATEGORY:SEARCH_ENGINE",
@@ -19,7 +21,7 @@ export const aj = arcjet({
     }),
     // rate limiting
     tokenBucket({
-      mode: "LIVE",
+      mode: isDevelopment ? "DRY_RUN" : "LIVE",
       refillRate: 30,
       interval: 5,
       capacity: 20,

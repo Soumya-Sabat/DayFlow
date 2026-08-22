@@ -1,176 +1,58 @@
 import express from "express";
 import { sql } from "../config/db.js";
+import { ownsUserOrIsAdmin, requireAuth, requireRoles } from "../lib/auth.js";
 
 const router = express.Router();
+router.use(requireAuth);
 
-// 1. Employee Check-In
-router.post("/check-in", async (req, res) => {
-  const { userId } = req.body;
-
+router.post("/check-in", async (req, res, next) => {
+  const userId = req.user.id;
   try {
-    const existing = await sql`
-      SELECT id FROM attendance WHERE user_id = ${userId} AND date = CURRENT_DATE;
-    `;
-
-    if (existing.length > 0) {
-      return res.status(400).json({ error: "Already checked in today" });
-    }
-
-    const record = await sql`
-      INSERT INTO attendance (user_id, check_in, date, status)
-      VALUES (${userId}, NOW(), CURRENT_DATE, 'Present')
-      RETURNING *;
-    `;
-    res.status(201).json({ message: "Checked in successfully", statusDot: "GREEN", record: record[0] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    const existing = await sql`SELECT id FROM attendance WHERE user_id = ${userId} AND date = CURRENT_DATE;`;
+    if (existing[0]) return res.status(409).json({ error: "You have already checked in today." });
+    const rows = await sql`INSERT INTO attendance (user_id, check_in, date, status) VALUES (${userId}, NOW(), CURRENT_DATE, 'Present') RETURNING *;`;
+    res.status(201).json({ message: "Checked in successfully", record: rows[0] });
+  } catch (error) { next(error); }
 });
 
-// 2. Employee Check-Out (Calculates Work Hours & Extra Hours)
-router.post("/check-out", async (req, res) => {
-  const { userId } = req.body;
-
+router.post("/check-out", async (req, res, next) => {
   try {
-    const record = await sql`
-      UPDATE attendance
-      SET check_out = NOW()
-      WHERE user_id = ${userId} AND date = CURRENT_DATE
-      RETURNING *;
-    `;
-
-    if (record.length === 0) {
-      return res.status(404).json({ error: "No active check-in record found for today" });
-    }
-
-    res.status(200).json({ message: "Checked out successfully", record: record[0] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    const rows = await sql`UPDATE attendance SET check_out = NOW() WHERE user_id = ${req.user.id} AND date = CURRENT_DATE AND check_out IS NULL RETURNING *;`;
+    if (!rows[0]) return res.status(409).json({ error: "No open check-in was found for today." });
+    res.json({ message: "Checked out successfully", record: rows[0] });
+  } catch (error) { next(error); }
 });
 
-// 3. Employee Attendance View (Monthly view with stats: Days Present, Leaves, Total Working Days)
-router.get("/my-attendance/:userId", async (req, res) => {
-  const { userId } = req.params;
-  const { month, year } = req.query; // e.g., ?month=10&year=2026
-
-  const targetMonth = month || new Date().getMonth() + 1;
-  const targetYear = year || new Date().getFullYear();
-
-  try {
-    // Detailed daily attendance with calculated work_hours and extra_hours
-    const logs = await sql`
-      SELECT 
-        id,
-        date,
-        TO_CHAR(check_in, 'HH24:MI') AS check_in,
-        TO_CHAR(check_out, 'HH24:MI') AS check_out,
-        status,
-        CASE 
-          WHEN check_in IS NOT NULL AND check_out IS NOT NULL THEN
-            TO_CHAR(check_out - check_in, 'HH24:MI')
-          ELSE '00:00'
-        END AS work_hours,
-        CASE 
-          WHEN check_in IS NOT NULL AND check_out IS NOT NULL AND (check_out - check_in) > INTERVAL '8 hours' THEN
-            TO_CHAR((check_out - check_in) - INTERVAL '8 hours', 'HH24:MI')
-          ELSE '00:00'
-        END AS extra_hours
-      FROM attendance
-      WHERE user_id = ${userId} 
-        AND EXTRACT(MONTH FROM date) = ${targetMonth}
-        AND EXTRACT(YEAR FROM date) = ${targetYear}
-      ORDER BY date DESC;
-    `;
-
-    // Summary Statistics for Employee Dashboard
-    const stats = await sql`
-      SELECT 
-        COUNT(CASE WHEN status = 'Present' THEN 1 END) AS count_days_present,
-        COUNT(CASE WHEN status = 'Leave' THEN 1 END) AS leaves_count,
-        COUNT(*) AS total_working_days
-      FROM attendance
-      WHERE user_id = ${userId}
-        AND EXTRACT(MONTH FROM date) = ${targetMonth}
-        AND EXTRACT(YEAR FROM date) = ${targetYear};
-    `;
-
-    res.status(200).json({
-      summary: stats[0],
-      logs
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 4. Admin / HR Attendance List View (Filterable by Date)
-router.get("/admin-view", async (req, res) => {
-  const { requesterrole } = req.headers;
-  const { date } = req.query; // e.g., ?date=2026-10-22
-
-  if (requesterrole !== "Admin" && requesterrole !== "HR") {
-    return res.status(403).json({ error: "Access Denied: Admin or HR access required" });
-  }
-
-  const targetDate = date || new Date().toISOString().split('T')[0];
-
+router.get("/my-attendance/:userId", async (req, res, next) => {
+  if (!ownsUserOrIsAdmin(req, req.params.userId)) return res.status(403).json({ error: "You can only view your own attendance." });
+  const month = Number(req.query.month) || new Date().getMonth() + 1;
+  const year = Number(req.query.year) || new Date().getFullYear();
   try {
     const logs = await sql`
-      SELECT 
-        a.id,
-        u.name AS employee_name,
-        u.employee_id,
-        a.date,
-        TO_CHAR(a.check_in, 'HH24:MI') AS check_in,
-        TO_CHAR(a.check_out, 'HH24:MI') AS check_out,
-        a.status,
-        CASE 
-          WHEN a.check_in IS NOT NULL AND a.check_out IS NOT NULL THEN
-            TO_CHAR(a.check_out - a.check_in, 'HH24:MI')
-          ELSE '00:00'
-        END AS work_hours,
-        CASE 
-          WHEN a.check_in IS NOT NULL AND a.check_out IS NOT NULL AND (a.check_out - a.check_in) > INTERVAL '8 hours' THEN
-            TO_CHAR((a.check_out - a.check_in) - INTERVAL '8 hours', 'HH24:MI')
-          ELSE '00:00'
-        END AS extra_hours
-      FROM users u
-      LEFT JOIN attendance a ON u.id = a.user_id AND a.date = ${targetDate}
-      ORDER BY u.name ASC;
-    `;
-
-    res.status(200).json({ date: targetDate, records: logs });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+      SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date, TO_CHAR(check_in, 'HH24:MI') AS check_in, TO_CHAR(check_out, 'HH24:MI') AS check_out, status,
+      CASE WHEN check_in IS NOT NULL AND check_out IS NOT NULL THEN TO_CHAR(check_out - check_in, 'HH24:MI') ELSE NULL END AS work_hours
+      FROM attendance WHERE user_id = ${req.params.userId} AND EXTRACT(MONTH FROM date) = ${month} AND EXTRACT(YEAR FROM date) = ${year} ORDER BY date DESC;`;
+    const summary = await sql`SELECT COUNT(*) FILTER (WHERE status = 'Present')::int AS count_days_present, COUNT(*) FILTER (WHERE status = 'Leave')::int AS leaves_count, COUNT(*)::int AS total_working_days FROM attendance WHERE user_id = ${req.params.userId} AND EXTRACT(MONTH FROM date) = ${month} AND EXTRACT(YEAR FROM date) = ${year};`;
+    res.json({ summary: summary[0], logs });
+  } catch (error) { next(error); }
 });
 
-// 5. Payable Days Computation (For Payslip Generation)
-router.get("/payable-days/:userId", async (req, res) => {
-  const { userId } = req.params;
-  const { month, year } = req.query;
-
-  const targetMonth = month || new Date().getMonth() + 1;
-  const targetYear = year || new Date().getFullYear();
-
+router.get("/admin-view", requireRoles("Admin", "HR"), async (req, res, next) => {
+  const date = String(req.query.date || new Date().toISOString().slice(0, 10));
   try {
-    const result = await sql`
-      SELECT 
-        COUNT(CASE WHEN status = 'Present' THEN 1 END) AS present_days,
-        COUNT(CASE WHEN status = 'Paid_Leave' THEN 1 END) AS paid_leave_days,
-        COUNT(CASE WHEN status = 'Unpaid_Leave' OR status = 'Absent' THEN 1 END) AS unpaid_deducted_days,
-        (COUNT(CASE WHEN status = 'Present' THEN 1 END) + COUNT(CASE WHEN status = 'Paid_Leave' THEN 1 END)) AS total_payable_days
-      FROM attendance
-      WHERE user_id = ${userId}
-        AND EXTRACT(MONTH FROM date) = ${targetMonth}
-        AND EXTRACT(YEAR FROM date) = ${targetYear};
-    `;
+    const records = await sql`
+      SELECT a.id, u.name AS employee_name, u.employee_id, TO_CHAR(a.date, 'YYYY-MM-DD') AS date, TO_CHAR(a.check_in, 'HH24:MI') AS check_in, TO_CHAR(a.check_out, 'HH24:MI') AS check_out, COALESCE(a.status, 'Absent') AS status
+      FROM users u LEFT JOIN attendance a ON u.id = a.user_id AND a.date = ${date}::date ORDER BY u.name;`;
+    res.json({ date, records });
+  } catch (error) { next(error); }
+});
 
-    res.status(200).json(result[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+router.get("/payable-days/:userId", async (req, res, next) => {
+  if (!ownsUserOrIsAdmin(req, req.params.userId)) return res.status(403).json({ error: "You can only view your own payable days." });
+  try {
+    const rows = await sql`SELECT COUNT(*) FILTER (WHERE status = 'Present')::int AS present_days, 0::int AS paid_leave_days, 0::int AS unpaid_deducted_days, COUNT(*) FILTER (WHERE status = 'Present')::int AS total_payable_days FROM attendance WHERE user_id = ${req.params.userId} AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE);`;
+    res.json(rows[0]);
+  } catch (error) { next(error); }
 });
 
 export default router;
